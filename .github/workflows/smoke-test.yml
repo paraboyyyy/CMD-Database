@@ -39,9 +39,16 @@ jobs:
           check /api/materials/does-not-exist           404 'not found'
           check /openapi.json                           200 'CMD Database API'
           check /docs                                   200 'swagger'
-          echo
-          echo "Materials in database:"; curl -sS "$URL/api/materials?limit=1" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])"
           exit $fail
+      - name: Database contents
+        run: |
+          curl -sS "$URL/api/materials?limit=200" > /tmp/page.json
+          python3 - <<'EOF'
+          import collections, json
+          page = json.load(open("/tmp/page.json"))
+          sources = dict(collections.Counter(m["source"] for m in page["items"]))
+          print(f"::notice title=Database::{page['total']} materials; by source (first 200): {sources}")
+          EOF
       - name: Space group (spglib)
         run: |
           curl -sS -X POST "$URL/api/symmetry" -H 'content-type: application/json' -d '{
