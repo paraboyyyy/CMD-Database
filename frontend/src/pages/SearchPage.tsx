@@ -16,6 +16,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
 
   const elements = (params.get("elements") ?? "").split(",").filter(Boolean);
+  const excluded = (params.get("exclude") ?? "").split(",").filter(Boolean);
   const mode = params.get("mode") === "only" ? "only" : "contains";
   const page = Math.max(Number(params.get("page") ?? 1), 1);
 
@@ -38,6 +39,7 @@ export default function SearchPage() {
       q: params.get("q") ?? undefined,
       elements: !only && els.length ? els.join(",") : undefined,
       chemsys: only && els.length ? els.join("-") : undefined,
+      exclude_elements: params.get("exclude") ?? undefined,
       crystal_system: params.get("crystal_system") ?? undefined,
       sort: params.get("sort") ?? "id",
       order: params.get("order") ?? "asc",
@@ -57,10 +59,8 @@ export default function SearchPage() {
     update({ q: query.trim() });
   };
 
-  const toggleElement = (el: string) => {
-    const next = elements.includes(el) ? elements.filter((x) => x !== el) : [...elements, el];
-    update({ elements: next.join(",") });
-  };
+  const setElements = (include: string[], exclude: string[]) =>
+    update({ elements: include.join(","), exclude: exclude.join(",") });
 
   const sortBy = (key: string) => {
     const same = (params.get("sort") ?? "id") === key;
@@ -142,7 +142,33 @@ export default function SearchPage() {
             </button>
           )}
         </div>
-        <PeriodicTable selected={elements} onToggle={toggleElement} />
+        {(elements.length > 0 || excluded.length > 0) && (
+          <div className="selection-chips" aria-label="Selected elements">
+            {elements.map((el) => (
+              <button
+                key={el}
+                type="button"
+                className="chip is-include"
+                onClick={() => setElements(elements.filter((x) => x !== el), excluded)}
+              >
+                {el} <span aria-hidden="true">×</span>
+                <span className="sr-only">remove</span>
+              </button>
+            ))}
+            {excluded.map((el) => (
+              <button
+                key={el}
+                type="button"
+                className="chip is-exclude"
+                onClick={() => setElements(elements, excluded.filter((x) => x !== el))}
+              >
+                no {el} <span aria-hidden="true">×</span>
+                <span className="sr-only">remove</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <PeriodicTable included={elements} excluded={excluded} onChange={setElements} />
       </section>
 
       <section className="card">

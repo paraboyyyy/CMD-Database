@@ -100,4 +100,23 @@ export function findSymmetry(crystal: Crystal) {
   });
 }
 
+export interface ElementCounts {
+  total: number;
+  counts: Record<string, number>;
+}
+
+const elementCountsCache = new Map<string, Promise<ElementCounts>>();
+
+/** Materials per element, among those containing all of `withElements` (comma separated). */
+export function getElementCounts(withElements: string) {
+  let pending = elementCountsCache.get(withElements);
+  if (!pending) {
+    const qs = withElements ? `?with=${encodeURIComponent(withElements)}` : "";
+    pending = request<ElementCounts>(`/api/elements${qs}`);
+    pending.catch(() => elementCountsCache.delete(withElements));
+    elementCountsCache.set(withElements, pending);
+  }
+  return pending;
+}
+
 export const API_DOCS_URL = `${BASE}/docs`;

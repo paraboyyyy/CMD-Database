@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { elementInfo } from "../lib/elements";
+import { onThemeChange } from "../lib/theme";
 import { type Crystal, type DisplayAtom, cartToFrac, formula } from "../lib/structure";
 import { type AtomStyle, CrystalScene, DEFAULT_OPTIONS, type SceneColors, type ViewOptions } from "./CrystalScene";
 import { angle, dihedral, distance } from "./measure";
@@ -44,11 +45,9 @@ export default function StructureViewer({ frames, name = "structure", compact = 
     scene.onSelect = setSelection;
     scene.setColors(readColors());
     sceneRef.current = scene;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onTheme = () => scene.setColors(readColors());
-    media.addEventListener("change", onTheme);
+    const stopWatching = onThemeChange(() => scene.setColors(readColors()));
     return () => {
-      media.removeEventListener("change", onTheme);
+      stopWatching();
       scene.dispose();
       sceneRef.current = null;
     };

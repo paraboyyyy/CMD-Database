@@ -6,6 +6,13 @@
     <meta name="description" content="CMD Database: crystal structures, material properties and a 3D structure viewer." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>CMD Database</title>
+    <script>
+      // Apply a saved theme before first paint to avoid a flash of the wrong colors.
+      try {
+        var t = localStorage.getItem("cmd-theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

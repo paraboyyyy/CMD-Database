@@ -83,6 +83,14 @@ def test_search_filters(client, params, expected):
     assert [m["formula_pretty"] for m in items] == expected
 
 
+def test_element_counts(client):
+    res = client.get("/api/elements")
+    assert res.json() == {"total": 3, "counts": {"Cl": 1, "Na": 1, "Si": 1, "Fe": 1, "O": 1}}
+    assert "s-maxage" in res.headers["cache-control"]
+    assert client.get("/api/elements", params={"with": "O"}).json() == {"total": 1, "counts": {"Fe": 1, "O": 1}}
+    assert client.get("/api/elements", params={"with": "O,Na"}).json() == {"total": 0, "counts": {}}
+
+
 def test_sort_and_paginate(client):
     page = client.get("/api/materials", params={"sort": "density", "order": "desc", "limit": 1}).json()
     assert page["total"] == 3 and len(page["items"]) == 1

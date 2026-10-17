@@ -41,6 +41,7 @@ jobs:
           check "/api/materials?formula=$formula"       200 "\"$id\""
           check "/api/materials/$id/download?fmt=cif"   200 '_cell_length_a'
           check "/api/materials/$id/download?fmt=poscar" 200 'Direct'
+          check "/api/elements?with=O"                 200 '"counts"'
           check /api/materials/does-not-exist           404 'not found'
           check /openapi.json                           200 'CMD Database API'
           check /docs                                   200 'swagger'
