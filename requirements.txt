@@ -5,3 +5,4 @@ sqlalchemy>=2.0,<3
 psycopg[binary]>=3.2
 pydantic-settings>=2.4
 spglib>=2.5
+seekpath>=2.1

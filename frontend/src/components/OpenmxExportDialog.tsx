@@ -5,7 +5,9 @@ import {
   autoKgrid,
   defaultOptions,
   missingSpecies,
+  segmentPoints,
   speciesOrder,
+  spinKeyword,
   writeOpenmxDat,
 } from "../lib/openmx";
 import {
@@ -14,6 +16,7 @@ import {
   QUALITY_LABELS,
   presetSpecies,
 } from "../lib/openmxPresets";
+import { getKpath } from "../api";
 import type { Crystal, Vec3 } from "../lib/structure";
 
 const SPECIES_KEY = "cmd-openmx-species";
@@ -79,6 +82,22 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
     return { ...defaultOptions(crystal, name), species };
   });
   const [copied, setCopied] = useState(false);
+  const [pathError, setPathError] = useState<string | null>(null);
+  const magnetic = spinKeyword(o) !== "off";
+
+  // Fetch the high-symmetry path the first time band output is switched on.
+  useEffect(() => {
+    if (!o.band.enabled || o.band.path) return;
+    let alive = true;
+    setPathError(null);
+    getKpath(crystal).then(
+      (path) => alive && setO((p) => ({ ...p, band: { ...p.band, path } })),
+      (e: Error) => alive && setPathError(e.message),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [o.band.enabled, o.band.path, crystal]);
 
   useEffect(() => {
     ref.current?.showModal();
@@ -205,6 +224,7 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
                   <th>PAO</th>
                   <th>VPS</th>
                   <th>Valence e⁻</th>
+                  {magnetic && <th title="Initial magnetic moment">μB</th>}
                 </tr>
               </thead>
               <tbody>
@@ -261,6 +281,17 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
                           onChange={(e) => setSpecies(el, { valence: e.target.value === "" ? null : Number(e.target.value) })}
                         />
                       </td>
+                      {magnetic && (
+                        <td className="moment">
+                          <input
+                            aria-label={`${el} initial magnetic moment`}
+                            type="number"
+                            step={0.5}
+                            value={o.moments[el] ?? 0}
+                            onChange={(e) => set("moments", { ...o.moments, [el]: Number(e.target.value) || 0 })}
+                          />
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -294,9 +325,15 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
               </label>
               <label className="field">
                 <span>Spin polarization</span>
-                <select value={o.spin} onChange={(e) => set("spin", e.target.value as OpenmxOptions["spin"])}>
+                <select
+                  value={o.soc ? "nc" : o.spin}
+                  disabled={o.soc}
+                  title={o.soc ? "Spin–orbit coupling needs noncollinear spin" : undefined}
+                  onChange={(e) => set("spin", e.target.value as OpenmxOptions["spin"])}
+                >
                   <option value="off">off</option>
                   <option value="on">on (collinear)</option>
+                  <option value="nc">NC (noncollinear)</option>
                 </select>
               </label>
               <label className="field">
@@ -316,6 +353,95 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
                 <input value={o.dataPath} onChange={(e) => set("dataPath", e.target.value)} />
               </label>
             </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Electronic structure output</legend>
+
+            <label className="check">
+              <input type="checkbox" checked={o.dos.enabled} onChange={(e) => set("dos", { ...o.dos, enabled: e.target.checked })} />
+              <b>DOS / PDOS</b>
+            </label>
+            {o.dos.enabled && (
+              <div className="grid-2 indent">
+                <div className="field">
+                  <span>Energy range (eV, relative to E_F)</span>
+                  <div className="row">
+                    <input type="number" step={1} aria-label="DOS minimum energy" value={o.dos.emin} onChange={(e) => set("dos", { ...o.dos, emin: Number(e.target.value) })} />
+                    <span>to</span>
+                    <input type="number" step={1} aria-label="DOS maximum energy" value={o.dos.emax} onChange={(e) => set("dos", { ...o.dos, emax: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <div className="field">
+                  <span>DOS k-grid</span>
+                  <div className="row triple">
+                    {[0, 1, 2].map((i) => (
+                      <input
+                        key={i}
+                        type="number"
+                        min={1}
+                        aria-label={`DOS k${i + 1}`}
+                        value={o.dos.kgrid[i]}
+                        onChange={(e) => {
+                          const kgrid = [...o.dos.kgrid] as Vec3;
+                          kgrid[i] = Math.max(1, Math.round(Number(e.target.value)) || 1);
+                          set("dos", { ...o.dos, kgrid });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <label className="check">
+              <input type="checkbox" checked={o.band.enabled} onChange={(e) => set("band", { ...o.band, enabled: e.target.checked })} />
+              <b>Band structure</b>
+            </label>
+            {o.band.enabled && (
+              <div className="indent">
+                {o.band.path ? (
+                  <>
+                    <p className="small">
+                      Path <span className="mono">{pathString(o.band.path.segments)}</span>{" "}
+                      <span className="muted">
+                        ({o.band.path.bravais_lattice}, {o.band.path.spacegroup}, seekpath)
+                      </span>
+                    </p>
+                    <label className="field">
+                      <span>
+                        k-points per Å⁻¹ ·{" "}
+                        {o.band.path.segments.reduce((n, s) => n + segmentPoints(s.length, o.band.density), 0)} points in total
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={5}
+                        value={o.band.density}
+                        onChange={(e) => set("band", { ...o.band, density: Math.max(1, Number(e.target.value) || 1) })}
+                      />
+                    </label>
+                  </>
+                ) : pathError ? (
+                  <p className="warn small">Could not get a k-path: {pathError}</p>
+                ) : (
+                  <p className="muted small">Finding the high-symmetry path…</p>
+                )}
+              </div>
+            )}
+
+            <label className="check">
+              <input type="checkbox" checked={o.soc} onChange={(e) => set("soc", e.target.checked)} />
+              <b>Spin–orbit coupling</b>
+            </label>
+            {o.soc && (
+              <p className="muted small indent">
+                Uses <span className="mono">scf.SpinPolarization NC</span> and{" "}
+                <span className="mono">scf.SpinOrbit.Coupling on</span>. SOC needs pseudopotentials with
+                j-dependent (fully relativistic) parts, so check that your VPS files include them. Set initial
+                moments in the species table for magnetic materials.
+              </p>
+            )}
           </fieldset>
         </div>
 
@@ -343,4 +469,16 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
       </footer>
     </dialog>
   );
+}
+
+/** "G-X-U|K-G-L": consecutive segments are joined, jumps shown with "|". */
+function pathString(segments: { from: string; to: string }[]): string {
+  const greek = (l: string) => (l === "G" ? "Γ" : l);
+  let out = "";
+  segments.forEach((s, i) => {
+    if (i === 0) out = greek(s.from);
+    else if (segments[i - 1].to !== s.from) out += `|${greek(s.from)}`;
+    out += `–${greek(s.to)}`;
+  });
+  return out;
 }

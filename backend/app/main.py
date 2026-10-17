@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import init_db
-from .routers import builder, elements, materials, symmetry
+from .routers import builder, elements, kpath, materials, symmetry
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.add_middleware(
 )
 app.include_router(builder.router)
 app.include_router(elements.router)
+app.include_router(kpath.router)
 app.include_router(materials.router)
 app.include_router(symmetry.router)
 

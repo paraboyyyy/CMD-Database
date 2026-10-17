@@ -73,3 +73,10 @@ jobs:
             "sites": [{"element": "Na", "frac": [0, 0, 0]}, {"element": "Cl", "frac": [0.5, 0.5, 0.5]}]}' | tee /tmp/build
           echo
           grep -q '"multiplicities":\[4,4\]' /tmp/build
+      - name: Band path (seekpath)
+        run: |
+          curl -sS -X POST "$URL/api/kpath" -H 'content-type: application/json' -d '{
+            "lattice": [[0,2.7155,2.7155],[2.7155,0,2.7155],[2.7155,2.7155,0]],
+            "frac": [[0,0,0],[0.25,0.25,0.25]], "species": ["Si","Si"]}' | tee /tmp/kpath
+          echo
+          grep -q '"bravais_lattice":"cF' /tmp/kpath

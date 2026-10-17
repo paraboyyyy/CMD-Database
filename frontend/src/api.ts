@@ -1,4 +1,5 @@
 import type { BuildResult, SpacegroupInfo } from "./lib/builder";
+import type { KPath } from "./lib/openmx";
 import { type Crystal, type LatticeParams, type Vec3, cartToFrac } from "./lib/structure";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -99,6 +100,20 @@ export function findSymmetry(crystal: Crystal) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+/** High-symmetry band path for a cell (seekpath), in its own reciprocal-lattice coordinates. */
+export function getKpath(crystal: Crystal) {
+  const lattice = crystal.lattice!;
+  return request<KPath>("/api/kpath", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      lattice,
+      frac: crystal.atoms.map((a) => cartToFrac(a.cart, lattice)),
+      species: crystal.atoms.map((a) => a.element),
+    }),
   });
 }
 

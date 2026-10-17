@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { autoKgrid, defaultOptions, missingSpecies, writeOpenmxDat } from "./openmx";
+import { autoKgrid, defaultOptions, missingSpecies, segmentPoints, spinKeyword, writeOpenmxDat } from "./openmx";
 import { parseStructureFile } from "./parsers";
 import { type Mat3, type Vec3, cartToFrac, fracToCart, norm, sub } from "./structure";
 
@@ -40,8 +40,8 @@ describe("OpenMX .dat writer", () => {
     expect(atoms).toHaveLength(8);
     expect(atoms.map((r) => r[0])).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
     // Up and down electrons are half the valence each.
-    expect(atoms.filter((r) => r[1] === "Na").every((r) => r[5] === "4.5" && r[6] === "4.5")).toBe(true);
-    expect(atoms.filter((r) => r[1] === "Cl").every((r) => r[5] === "3.5" && r[6] === "3.5")).toBe(true);
+    expect(atoms.filter((r) => r[1] === "Na").every((r) => r[5] === "4.50" && r[6] === "4.50")).toBe(true);
+    expect(atoms.filter((r) => r[1] === "Cl").every((r) => r[5] === "3.50" && r[6] === "3.50")).toBe(true);
     const cell = block(dat, "Atoms.UnitVectors").map((r) => r.map(Number));
     expect(cell[0][0]).toBeCloseTo(5.64, 6);
     expect(cell[2][2]).toBeCloseTo(5.64, 6);
@@ -95,5 +95,79 @@ describe("OpenMX .dat writer", () => {
   it("rejects molecules", () => {
     const water = load("water.xyz");
     expect(() => writeOpenmxDat(water, defaultOptions(water, "w"))).toThrow(/periodic/);
+  });
+});
+
+describe("DOS, band structure, spin and SOC", () => {
+  const nacl = load("NaCl_rocksalt.cif");
+  const base = { ...defaultOptions(nacl, "NaCl"), species };
+  const path = {
+    bravais_lattice: "cF2",
+    spacegroup: "Fm-3m",
+    points: { G: [0, 0, 0] as Vec3, X: [0, 1, 0] as Vec3, L: [0.5, 0.5, 0.5] as Vec3 },
+    segments: [
+      { from: "G", to: "X", length: 1.114 },
+      { from: "X", to: "L", length: 0.05 },
+    ],
+  };
+
+  it("chooses the spin keyword", () => {
+    expect(spinKeyword({ spin: "off", soc: false })).toBe("off");
+    expect(spinKeyword({ spin: "on", soc: false })).toBe("on");
+    expect(spinKeyword({ spin: "nc", soc: false })).toBe("NC");
+    expect(spinKeyword({ spin: "off", soc: true })).toBe("NC");
+  });
+
+  it("writes the band path with points proportional to segment length", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, band: { enabled: true, path, density: 20 } });
+    expect(keyword(dat, "Band.dispersion")).toBe("on");
+    expect(keyword(dat, "Band.Nkpath")).toBe("2");
+    const rows = block(dat, "Band.kpath");
+    expect(rows[0]).toEqual(["22", "0.000000", "0.000000", "0.000000", "0.000000", "1.000000", "0.000000", "G", "X"]);
+    expect(rows[1][0]).toBe("2"); // short segments still get two points
+    expect(rows[1].slice(-2)).toEqual(["X", "L"]);
+    expect(segmentPoints(1.114, 20)).toBe(22);
+  });
+
+  it("scales band k-points for a supercell", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, repeat: [2, 1, 1], band: { enabled: true, path, density: 20 } });
+    expect(block(dat, "Band.kpath")[1].slice(4, 7)).toEqual(["1.000000", "0.500000", "0.500000"]);
+  });
+
+  it("leaves bands out when disabled or without a path", () => {
+    expect(writeOpenmxDat(nacl, base)).not.toContain("Band.dispersion");
+    expect(writeOpenmxDat(nacl, { ...base, band: { enabled: true, path: null, density: 20 } })).not.toContain("Band.kpath");
+  });
+
+  it("writes DOS settings", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, dos: { enabled: true, emin: -12, emax: 8, kgrid: [9, 9, 9] } });
+    expect(keyword(dat, "Dos.fileout")).toBe("on");
+    expect(keyword(dat, "Dos.Erange")).toBe("-12.0 8.0");
+    expect(keyword(dat, "Dos.Kgrid")).toBe("9 9 9");
+  });
+
+  it("sets initial moments through up/down electrons", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, spin: "on", moments: { Na: 1, Cl: -0.5 } });
+    expect(keyword(dat, "scf.SpinPolarization")).toBe("on");
+    const atoms = block(dat, "Atoms.SpeciesAndCoordinates");
+    expect(atoms.find((r) => r[1] === "Na")!.slice(5)).toEqual(["5.00", "4.00"]);
+    expect(atoms.find((r) => r[1] === "Cl")!.slice(5)).toEqual(["3.25", "3.75"]);
+    // Up + down always adds up to the valence.
+    for (const r of atoms) expect(Number(r[5]) + Number(r[6])).toBeCloseTo(r[1] === "Na" ? 9 : 7, 10);
+    const odd = block(writeOpenmxDat(nacl, { ...base, spin: "on", moments: { Na: 0.33, Cl: 1 / 3 } }), "Atoms.SpeciesAndCoordinates");
+    for (const r of odd) expect((Number(r[5]) * 100 + Number(r[6]) * 100) / 100).toBe(r[1] === "Na" ? 9 : 7);
+    // Moments are ignored without spin polarization.
+    const off = block(writeOpenmxDat(nacl, { ...base, moments: { Na: 1 } }), "Atoms.SpeciesAndCoordinates");
+    expect(off.find((r) => r[1] === "Na")!.slice(5)).toEqual(["4.50", "4.50"]);
+  });
+
+  it("writes noncollinear atom lines and SOC", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, soc: true });
+    expect(keyword(dat, "scf.SpinPolarization")).toBe("NC");
+    expect(keyword(dat, "scf.SpinOrbit.Coupling")).toBe("on");
+    const row = block(dat, "Atoms.SpeciesAndCoordinates")[0];
+    expect(row).toHaveLength(13);
+    expect(row.slice(7)).toEqual(["0.0", "0.0", "0.0", "0.0", "0", "off"]);
+    expect(writeOpenmxDat(nacl, base)).not.toContain("SpinOrbit");
   });
 });

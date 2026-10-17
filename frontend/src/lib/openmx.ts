@@ -7,6 +7,14 @@ export interface OpenmxSpecies {
   valence: number | null; // electrons in the VPS ("valence.electron" in the .vps file)
 }
 
+/** Band-structure path from /api/kpath, in fractional coordinates of the unit cell's reciprocal lattice. */
+export interface KPath {
+  bravais_lattice: string;
+  spacegroup: string;
+  points: Record<string, Vec3>;
+  segments: { from: string; to: string; length: number }[];
+}
+
 export interface OpenmxOptions {
   systemName: string;
   coordinates: "Ang" | "FRAC";
@@ -14,7 +22,13 @@ export interface OpenmxOptions {
   species: Record<string, OpenmxSpecies>;
   dataPath: string;
   xc: "GGA-PBE" | "LDA" | "LSDA-CA" | "LSDA-PW";
-  spin: "off" | "on";
+  spin: "off" | "on" | "nc";
+  /** Spin–orbit coupling (needs noncollinear spin; written as scf.SpinPolarization NC). */
+  soc: boolean;
+  /** Initial magnetic moment per element in μB (spin-polarized runs). */
+  moments: Record<string, number>;
+  dos: { enabled: boolean; emin: number; emax: number; kgrid: Vec3 };
+  band: { enabled: boolean; path: KPath | null; density: number }; // density: k-points per Å⁻¹
   energyCutoff: number; // Ry
   kgrid: Vec3;
   electronicTemperature: number; // K
@@ -29,6 +43,7 @@ export function autoKgrid(lattice: Mat3, repeat: Vec3 = [1, 1, 1], density = 25)
 }
 
 export function defaultOptions(crystal: Crystal, name: string): OpenmxOptions {
+  const kgrid: Vec3 = crystal.lattice ? autoKgrid(crystal.lattice) : [1, 1, 1];
   return {
     systemName: name.replace(/[^\w.-]+/g, "_"),
     coordinates: "FRAC",
@@ -37,8 +52,12 @@ export function defaultOptions(crystal: Crystal, name: string): OpenmxOptions {
     dataPath: "../DFT_DATA19",
     xc: "GGA-PBE",
     spin: "off",
+    soc: false,
+    moments: {},
+    dos: { enabled: false, emin: -10, emax: 10, kgrid: kgrid.map((k) => k * 2) as Vec3 },
+    band: { enabled: false, path: null, density: 20 },
     energyCutoff: 220,
-    kgrid: crystal.lattice ? autoKgrid(crystal.lattice) : [1, 1, 1],
+    kgrid,
     electronicTemperature: 300,
     maxIter: 100,
     criterion: 1e-6,
@@ -60,7 +79,19 @@ export function missingSpecies(crystal: Crystal, species: Record<string, OpenmxS
 }
 
 const f = (x: number, digits = 10) => (Object.is(x, -0) ? 0 : x).toFixed(digits).padStart(digits + 5);
-const num = (x: number | null) => (x === null ? "?" : x.toFixed(1));
+const k = (x: number) => f(x, 6);
+
+/** Value of scf.SpinPolarization: SOC always needs the noncollinear treatment. */
+export function spinKeyword(o: Pick<OpenmxOptions, "spin" | "soc">): "off" | "on" | "NC" {
+  if (o.soc || o.spin === "nc") return "NC";
+  return o.spin;
+}
+
+/** k-points on each band-path segment, proportional to its length (at least 2). */
+export function segmentPoints(length: number, density: number): number {
+  return Math.max(2, Math.round(length * density));
+}
+const num = (x: number | null) => (x === null ? "?" : x.toFixed(2));
 
 /** Write an OpenMX input file (.dat) for a periodic crystal. */
 export function writeOpenmxDat(crystal: Crystal, o: OpenmxOptions): string {
@@ -98,13 +129,19 @@ export function writeOpenmxDat(crystal: Crystal, o: OpenmxOptions): string {
   kv("Atoms.Number", atoms.length);
   kv("Atoms.SpeciesAndCoordinates.Unit", o.coordinates);
   L.push("<Atoms.SpeciesAndCoordinates");
+  const spin = spinKeyword(o);
   atoms.forEach((a, i) => {
     const v = o.coordinates === "FRAC" ? (cartToFrac(a.cart, lattice).map((x) => wrap01(x, 1e-8)) as Vec3) : a.cart;
     const val = o.species[a.element]?.valence ?? null;
-    const half = val === null ? null : val / 2;
-    L.push(
-      `  ${String(i + 1).padStart(5)}  ${a.element.padEnd(4)}${f(v[0])}${f(v[1])}${f(v[2])}   ${num(half)}  ${num(half)}`,
-    );
+    // Up/down electrons set the initial moment: (valence ± m) / 2.
+    const m = spin === "off" || val === null ? 0 : Math.max(-val, Math.min(val, o.moments[a.element] ?? 0));
+    // Round `up` first and derive `down`, so the two always add up to the valence exactly.
+    const up = val === null ? null : Math.round(((val + m) / 2) * 100) / 100;
+    const down = val === null || up === null ? null : val - up;
+    // Noncollinear runs add Euler angles (theta, phi) of the initial spin and orbital moments,
+    // a spin-constraint switch and the orbital-polarization switch.
+    const nc = spin === "NC" ? "   0.0  0.0   0.0  0.0   0  off" : "";
+    L.push(`  ${String(i + 1).padStart(5)}  ${a.element.padEnd(4)}${f(v[0])}${f(v[1])}${f(v[2])}   ${num(up)}  ${num(down)}${nc}`);
   });
   L.push("Atoms.SpeciesAndCoordinates>");
   kv("Atoms.UnitVectors.Unit", "Ang");
@@ -114,7 +151,8 @@ export function writeOpenmxDat(crystal: Crystal, o: OpenmxOptions): string {
   blank();
 
   kv("scf.XcType", o.xc);
-  kv("scf.SpinPolarization", o.spin);
+  kv("scf.SpinPolarization", spin);
+  if (o.soc) kv("scf.SpinOrbit.Coupling", "on");
   kv("scf.ElectronicTemperature", o.electronicTemperature.toFixed(1));
   kv("scf.energycutoff", o.energyCutoff.toFixed(1));
   kv("scf.maxIter", o.maxIter);
@@ -128,6 +166,30 @@ export function writeOpenmxDat(crystal: Crystal, o: OpenmxOptions): string {
   kv("scf.Mixing.StartPulay", 5);
   kv("scf.criterion", o.criterion.toExponential(1));
   blank();
+
+  if (o.band.enabled && o.band.path) {
+    // Path points are fractional in the unit cell's reciprocal lattice; a supercell's reciprocal
+    // vectors are 1/n as long, so the same k-points have n times larger coordinates.
+    const p = o.band.path;
+    const at = (label: string) => p.points[label].map((x, i) => x * o.repeat[i]) as Vec3;
+    kv("Band.dispersion", "on");
+    kv("Band.Nkpath", p.segments.length);
+    L.push("<Band.kpath");
+    for (const seg of p.segments) {
+      const [a, b] = [at(seg.from), at(seg.to)];
+      const n = segmentPoints(seg.length, o.band.density);
+      L.push(`  ${String(n).padStart(4)} ${k(a[0])}${k(a[1])}${k(a[2])}  ${k(b[0])}${k(b[1])}${k(b[2])}   ${seg.from} ${seg.to}`);
+    }
+    L.push("Band.kpath>");
+    blank();
+  }
+
+  if (o.dos.enabled) {
+    kv("Dos.fileout", "on");
+    kv("Dos.Erange", `${o.dos.emin.toFixed(1)} ${o.dos.emax.toFixed(1)}`);
+    kv("Dos.Kgrid", o.dos.kgrid.join(" "));
+    blank();
+  }
 
   kv("MD.Type", isRelax ? "RF" : "nomd");
   kv("MD.maxIter", isRelax ? 100 : 1);

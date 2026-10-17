@@ -18,6 +18,9 @@ viewer struktur kristal 3D di browser (mirip OpenMX Viewer).
     k-grid otomatis, XC, spin, cutoff, SCF atau optimasi geometri. Basis **Quick / Standard / Precise**
     terisi otomatis dari tabel PAO rekomendasi manual OpenMX (DFT_DATA19, H–Bi), termasuk pilihan VPS
     H/S untuk Fe, Co, Ni, Cu, Zn. Unsur di luar tabel diisi manual dan diingat browser.
+    Opsi **DOS/PDOS** (`Dos.fileout`, rentang energi, k-grid), **band structure** (`Band.kpath` otomatis dari
+    seekpath, ditransformasikan ke sel yang diekspor termasuk supercell), **spin collinear/noncollinear**
+    dengan momen magnet awal per unsur, dan **SOC** (`scf.SpinOrbit.Coupling on`).
     Tersedia juga di halaman detail material.
   - Tema terang dan gelap otomatis
 - **Builder** (`/builder`): buat material sendiri. Pilih space group (230, termasuk setting/origin choice),
@@ -131,6 +134,7 @@ Hapus data contoh dengan `python -m scripts.remove_demo`.
 | `GET /api/spacegroups` | 230 space group beserta setting-nya (nomor Hall) |
 | `POST /api/build` | Bangkitkan sel lengkap dari space group (`hall`), parameter kisi, dan situs tak ekuivalen |
 | `GET /api/elements?with=` | Jumlah material per unsur (untuk heatmap tabel periodik) |
+| `POST /api/kpath` | Jalur k simetri tinggi (seekpath) dalam koordinat resiprokal sel yang dikirim |
 
 ## Tes
 
