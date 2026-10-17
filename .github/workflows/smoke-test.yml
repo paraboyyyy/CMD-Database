@@ -29,18 +29,24 @@ jobs:
           }
           check /                                       200 'id="root"'
           check /viewer                                 200 'id="root"'
-          check /materials/cmd-5                        200 'id="root"'
           check /api/health                             200 '"ok"'
           check "/api/materials?limit=1"                200 '"total"'
-          check "/api/materials?q=Al2O3"                200 'Al2O3'
-          check "/api/materials?formula=O2LiCo"         200 'LiCoO2'
-          check /api/materials/cmd-16                   200 'R-3c'
-          check "/api/materials/cmd-5/download?fmt=cif" 200 '_cell_length_a'
+          # The rest uses whichever material comes first, so it works for any database contents.
+          first=$(curl -sS "$URL/api/materials?limit=1")
+          id=$(echo "$first" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['id'])")
+          formula=$(echo "$first" | python3 -c "import json,sys; print(json.load(sys.stdin)['items'][0]['formula_pretty'])")
+          echo "first material: $id $formula"
+          check "/materials/$id"                        200 'id="root"'
+          check "/api/materials/$id"                    200 '"lattice"'
+          check "/api/materials?formula=$formula"       200 "\"$id\""
+          check "/api/materials/$id/download?fmt=cif"   200 '_cell_length_a'
+          check "/api/materials/$id/download?fmt=poscar" 200 'Direct'
           check /api/materials/does-not-exist           404 'not found'
           check /openapi.json                           200 'CMD Database API'
           check /docs                                   200 'swagger'
           exit $fail
       - name: Database contents
+        if: always()
         run: |
           curl -sS "$URL/api/materials?limit=200" > /tmp/page.json
           python3 - <<'EOF'
