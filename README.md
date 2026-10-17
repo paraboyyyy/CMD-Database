@@ -14,6 +14,9 @@ viewer struktur kristal 3D di browser (mirip OpenMX Viewer).
   - Proyeksi perspektif atau ortografik, tampilan sepanjang a/b/c, ekspor PNG
   - Klik atom untuk koordinat fraksional, jarak, sudut, dan dihedral
   - Tombol *Find space group* (dianalisis oleh backend dengan spglib)
+  - **Export input OpenMX (.dat)**: koordinat fraksional (`FRAC`) atau Kartesian (`Ang`), supercell,
+    k-grid otomatis, XC, spin, cutoff, SCF atau optimasi geometri. PAO/VPS/valensi per unsur diisi
+    sekali (sesuai folder `DFT_DATA` milikmu) dan diingat browser. Tersedia juga di halaman detail material.
   - Tema terang dan gelap otomatis
 
 ## Arsitektur

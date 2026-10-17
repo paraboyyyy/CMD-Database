@@ -1,6 +1,7 @@
 import { type DragEvent, useRef, useState } from "react";
 import { type SymmetryResult, findSymmetry } from "../api";
 import { SpaceGroup } from "../components/Formula";
+import OpenmxExportDialog from "../components/OpenmxExportDialog";
 import { ACCEPTED_FILES, parseStructureFile } from "../lib/parsers";
 import { type Crystal, formula, latticeParams } from "../lib/structure";
 import StructureViewer from "../viewer/StructureViewer";
@@ -23,6 +24,7 @@ export default function ViewerPage() {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [symmetry, setSymmetry] = useState<SymmetryResult | string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const open = (text: string, name: string) => {
@@ -132,6 +134,11 @@ export default function ViewerPage() {
                 Find space group
               </button>
             )}
+            {first!.lattice && (
+              <button type="button" onClick={() => setExporting(true)}>
+                Export OpenMX (.dat)…
+              </button>
+            )}
             {symmetry && typeof symmetry !== "string" && (
               <span className="badge">
                 <SpaceGroup symbol={symmetry.spacegroup_symbol} /> ({symmetry.spacegroup_number}) · {symmetry.crystal_system}
@@ -139,6 +146,13 @@ export default function ViewerPage() {
             )}
             {typeof symmetry === "string" && <span className="muted small">{symmetry}</span>}
           </div>
+          {exporting && (
+            <OpenmxExportDialog
+              crystal={first!}
+              name={loaded.name.replace(/\.[^.]+$/, "")}
+              onClose={() => setExporting(false)}
+            />
+          )}
           <StructureViewer key={loaded.name + loaded.text.length} frames={loaded.frames} name={loaded.name.replace(/\.[^.]+$/, "")} />
         </>
       ) : (

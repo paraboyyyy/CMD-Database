@@ -4,6 +4,7 @@ import { type MaterialDetail, downloadUrl, getMaterial } from "../api";
 import { fromPymatgen } from "../lib/structure";
 import StructureViewer from "../viewer/StructureViewer";
 import { Formula, SpaceGroup } from "../components/Formula";
+import OpenmxExportDialog from "../components/OpenmxExportDialog";
 
 const SOURCES: Record<string, { label: string; url?: (id: string) => string; license?: string }> = {
   materials_project: {
@@ -22,6 +23,7 @@ export default function MaterialPage() {
   const { id = "" } = useParams();
   const [material, setMaterial] = useState<MaterialDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     setMaterial(null);
@@ -129,6 +131,19 @@ export default function MaterialPage() {
               </a>
             ))}
           </div>
+          <h2>Calculation input</h2>
+          <div className="row wrap">
+            <button type="button" className="primary" onClick={() => setExporting(true)}>
+              OpenMX (.dat)…
+            </button>
+          </div>
+          {exporting && (
+            <OpenmxExportDialog
+              crystal={frames[0]}
+              name={`${m.formula_pretty}_${m.id}`}
+              onClose={() => setExporting(false)}
+            />
+          )}
           <h2>Source</h2>
           <p>
             {source.url && m.source_id ? (
