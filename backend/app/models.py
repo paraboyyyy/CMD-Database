@@ -18,6 +18,8 @@ class Material(Base):
     formula_pretty: Mapped[str] = mapped_column(String(128), index=True)
     formula_reduced: Mapped[str] = mapped_column(String(128), index=True)
     formula_anonymous: Mapped[str] = mapped_column(String(128), index=True)
+    # Order-independent reduced formula (services/formula.py), the target of formula search.
+    formula_key: Mapped[str] = mapped_column(String(128), index=True)
     # Sorted element symbols joined by "-", e.g. "Fe-O". Exact-match chemical system search.
     chemsys: Mapped[str] = mapped_column(String(256), index=True)
     # Same symbols wrapped in commas, e.g. ",Fe,O,", so "contains element X" is a portable LIKE.

@@ -1,0 +1,65 @@
+name: Import data
+
+# Run from the Actions tab: fills the production database (Neon) with real data.
+# Needs repository secrets DATABASE_URL (from Neon/Vercel) and, for Materials Project, MP_API_KEY.
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "What to import"
+        type: choice
+        options: [materials_project, demo_samples, remove_demo_samples]
+        default: materials_project
+      query:
+        description: "Materials Project: chemical system (Li-Fe-O), elements (elements:Si,O) or IDs (ids:mp-149,mp-22862)"
+        default: "Si"
+      max:
+        description: "Materials Project: maximum number of entries"
+        default: "100"
+      stable_only:
+        description: "Materials Project: only thermodynamically stable entries"
+        type: boolean
+        default: true
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      CMD_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      MP_API_KEY: ${{ secrets.MP_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            backend/requirements*.txt
+      - name: Check secrets
+        run: |
+          if [ -z "$CMD_DATABASE_URL" ]; then echo "::error::Add the DATABASE_URL repository secret first"; exit 1; fi
+      - run: pip install -r requirements-ingest.txt mp-api
+      - name: Materials Project
+        if: inputs.source == 'materials_project'
+        env:
+          QUERY: ${{ inputs.query }}
+          MAX: ${{ inputs.max }}
+          STABLE: ${{ inputs.stable_only }}
+        run: |
+          case "$QUERY" in
+            elements:*) args=(--elements "${QUERY#elements:}") ;;
+            ids:*) args=(--ids "${QUERY#ids:}") ;;
+            *) args=(--chemsys "$QUERY") ;;
+          esac
+          [ "$STABLE" = "true" ] && args+=(--stable-only)
+          python -m scripts.import_mp "${args[@]}" --max "$MAX"
+      - name: Demo samples
+        if: inputs.source == 'demo_samples'
+        run: python -m scripts.seed_samples --db
+      - name: Remove demo samples
+        if: inputs.source == 'remove_demo_samples'
+        run: python -m scripts.remove_demo

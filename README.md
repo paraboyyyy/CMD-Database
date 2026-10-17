@@ -26,6 +26,28 @@ data/       contoh file struktur (dipakai viewer dan tes)
 
 Database memakai PostgreSQL (kolom JSONB) di produksi dan SQLite untuk pengembangan lokal.
 
+API yang berjalan di server sengaja dibuat ringan (FastAPI + SQLAlchemy + spglib, tanpa pymatgen),
+supaya muat di fungsi serverless Vercel. pymatgen hanya dipakai oleh script import
+(`backend/scripts/`), yang dijalankan dari komputer lokal atau GitHub Actions.
+
+## Deploy production (Vercel + Neon)
+
+1. **Import project**: di https://vercel.com/new pilih repo `CMD-Database`. Biarkan *Root Directory*
+   kosong (root repo) dan *Framework Preset* **Other**. Semua pengaturan lain sudah ada di `vercel.json`.
+   Klik **Deploy**.
+2. **Database**: di project Vercel buka **Storage → Create Database → Neon (Postgres)**, lalu
+   hubungkan ke project. Vercel otomatis menambahkan `DATABASE_URL`. Klik **Redeploy**.
+   Saat pertama kali dipakai, API membuat tabel dan mengisi 17 struktur contoh.
+   Tanpa database, situs tetap jalan dengan data contoh di SQLite sementara (`/tmp`).
+3. **Isi data asli** lewat GitHub Actions:
+   - Di GitHub: **Settings → Secrets and variables → Actions**, tambahkan `DATABASE_URL`
+     (salin dari Neon/Vercel) dan `MP_API_KEY` (dari https://next-gen.materialsproject.org/api).
+   - Buka tab **Actions → Import data → Run workflow**, isi misalnya `Li-Fe-O` atau `elements:Si,O`.
+   - Setelah data asli masuk, jalankan workflow yang sama dengan pilihan `remove_demo_samples`, dan
+     tambahkan environment variable `CMD_LOAD_DEMO_DATA=false` di Vercel.
+
+Setiap push ke `main` otomatis di-deploy ulang oleh Vercel.
+
 ## Menjalankan
 
 ### Dengan Docker (paling mudah)
@@ -37,7 +59,7 @@ docker compose up --build
 - Web: http://localhost:8080
 - API + dokumentasi interaktif: http://localhost:8000/docs
 
-Data contoh (17 struktur kristal klasik) otomatis dimasukkan saat backend start.
+Data contoh (17 struktur kristal klasik) otomatis dimasukkan ke database yang masih kosong.
 
 ### Tanpa Docker (untuk pengembangan)
 
@@ -47,8 +69,7 @@ Backend (Python 3.11+):
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-python -m scripts.seed_samples        # isi data contoh ke SQLite (cmd.db)
-uvicorn app.main:app --reload         # http://localhost:8000
+uvicorn app.main:app --reload         # http://localhost:8000, data contoh dimuat otomatis ke cmd.db
 ```
 
 Frontend (Node 20+), di terminal lain:
@@ -63,6 +84,7 @@ npm run dev                           # http://localhost:5173 (proxy /api ke :80
 
 ```bash
 cd backend
+pip install -r requirements-ingest.txt
 
 # Dari Materials Project (butuh API key gratis, lisensi data CC BY 4.0)
 pip install mp-api
@@ -75,8 +97,11 @@ python -m scripts.import_files path/ke/folder --source cod
 ```
 
 Import bersifat *upsert* berdasarkan `(source, source_id)`, jadi aman dijalankan ulang.
-Pakai `CMD_DATABASE_URL` untuk memilih database, misalnya
-`postgresql+psycopg://user:pass@host:5432/cmd`.
+Database dipilih lewat `CMD_DATABASE_URL` (atau `DATABASE_URL`), misalnya connection string dari Neon.
+Hapus data contoh dengan `python -m scripts.remove_demo`.
+
+`python -m scripts.seed_samples` membuat ulang `data/samples/` dan `backend/app/demo_materials.json`
+(data contoh yang ikut dalam deploy).
 
 ## API
 
@@ -85,7 +110,7 @@ Pakai `CMD_DATABASE_URL` untuk memilih database, misalnya
 | `GET /api/materials` | Cari: `q`, `formula`, `elements`, `exclude_elements`, `chemsys`, `spacegroup_number`, `crystal_system`, `nelements_min/max`, `band_gap_min/max`, `sort`, `order`, `limit`, `offset` |
 | `GET /api/materials/{id}` | Detail lengkap termasuk struktur (format pymatgen) |
 | `GET /api/materials/{id}/download?fmt=cif\|poscar\|xyz\|json` | Unduh struktur |
-| `POST /api/parse` | Upload file struktur, kembalikan simetri dan kisi |
+| `POST /api/symmetry` | Space group dari sel (`lattice`, `frac`, `species`) memakai spglib |
 
 ## Tes
 
@@ -103,4 +128,5 @@ cd frontend && npm test
 - [ ] Fase 5: isosurface dari file `.cube` (densitas/orbital), plot band structure dan DOS,
       parser input/output OpenMX (`.dat`, `.md`, `.out`)
 - [ ] Fase 6: akun pengguna, upload hasil perhitungan lewat web, data privat lab vs publik
-- [ ] Fase 7: deploy (domain, HTTPS, backup database)
+- [x] Fase 7 (dasar): konfigurasi deploy Vercel + Neon, workflow import data
+- [ ] Fase 7 lanjutan: domain sendiri, backup database

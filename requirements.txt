@@ -1,0 +1,7 @@
+# API runtime dependencies (installed by Vercel and the backend Docker image).
+# Kept small on purpose: pymatgen is only needed by the import scripts (backend/requirements-ingest.txt).
+fastapi>=0.115,<1
+sqlalchemy>=2.0,<3
+psycopg[binary]>=3.2
+pydantic-settings>=2.4
+spglib>=2.5

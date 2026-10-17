@@ -1,5 +1,5 @@
 import { type DragEvent, useRef, useState } from "react";
-import { type ParsedStructure, parseOnServer } from "../api";
+import { type SymmetryResult, findSymmetry } from "../api";
 import { SpaceGroup } from "../components/Formula";
 import { ACCEPTED_FILES, parseStructureFile } from "../lib/parsers";
 import { type Crystal, formula, latticeParams } from "../lib/structure";
@@ -22,7 +22,7 @@ export default function ViewerPage() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
-  const [symmetry, setSymmetry] = useState<ParsedStructure | string | null>(null);
+  const [symmetry, setSymmetry] = useState<SymmetryResult | string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const open = (text: string, name: string) => {
@@ -49,7 +49,7 @@ export default function ViewerPage() {
     if (!loaded) return;
     setSymmetry("Analyzing…");
     try {
-      setSymmetry(await parseOnServer(loaded.text, loaded.name));
+      setSymmetry(await findSymmetry(loaded.frames[0]));
     } catch (e) {
       setSymmetry((e as Error).message);
     }
@@ -134,7 +134,7 @@ export default function ViewerPage() {
             )}
             {symmetry && typeof symmetry !== "string" && (
               <span className="badge">
-                <SpaceGroup symbol={symmetry.spacegroup_symbol ?? ""} /> ({symmetry.spacegroup_number}) · {symmetry.crystal_system}
+                <SpaceGroup symbol={symmetry.spacegroup_symbol} /> ({symmetry.spacegroup_number}) · {symmetry.crystal_system}
               </span>
             )}
             {typeof symmetry === "string" && <span className="muted small">{symmetry}</span>}

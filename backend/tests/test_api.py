@@ -6,8 +6,11 @@ from pymatgen.core import Lattice, Structure
 
 from app import db
 from app.db import get_session
+from app.config import normalize_database_url
 from app.main import app
+from app.services.formula import formula_key, parse_formula
 from app.services.ingest import add_material
+from app.services.structure import parse_structure, summarize
 
 SAMPLES = Path(__file__).resolve().parents[2] / "data" / "samples"
 
@@ -92,32 +95,93 @@ def test_invalid_formula(client):
 
 @pytest.mark.parametrize("fmt", ["cif", "poscar", "xyz", "json"])
 def test_download_roundtrip(client, fmt):
-    res = client.get("/api/materials/cmd-1/download", params={"fmt": fmt})
+    res = client.get("/api/materials/cmd-3/download", params={"fmt": fmt})
     assert res.status_code == 200
     assert "attachment" in res.headers["content-disposition"]
-    if fmt != "xyz":
-        name = {"cif": "x.cif", "poscar": "POSCAR", "json": "x.json"}[fmt]
-        files = {"file": (name, res.content)}
-        parsed = client.post("/api/parse", files=files).json()
-        assert parsed["spacegroup_number"] == 225
+    name = {"cif": "x.cif", "poscar": "POSCAR", "json": "x.json", "xyz": "x.xyz"}[fmt]
+    if fmt == "xyz":
+        # Extended XYZ keeps the lattice, so it round-trips as a periodic structure.
+        lines = res.text.splitlines()
+        matrix = [float(v) for v in lines[1].split('"')[1].split()]
+        rows = [line.split() for line in lines[2:]]
+        structure = Structure(
+            [matrix[0:3], matrix[3:6], matrix[6:9]],
+            [r[0] for r in rows],
+            [[float(v) for v in r[1:4]] for r in rows],
+            coords_are_cartesian=True,
+        )
+    else:
+        structure = parse_structure(res.text, name)
+    assert summarize(structure)["spacegroup_symbol"] == "R-3c"
+    assert len(structure) == 30
 
 
-def test_parse_sample_cif(client):
-    cif = (SAMPLES / "Al2O3_corundum.cif").read_bytes()
-    parsed = client.post("/api/parse", files={"file": ("Al2O3.cif", cif)}).json()
-    assert parsed["periodic"] is True
-    assert parsed["formula_pretty"] == "Al2O3"
-    assert parsed["spacegroup_symbol"] == "R-3c"
+def _cell(structure):
+    return {
+        "lattice": structure.lattice.matrix.tolist(),
+        "frac": structure.frac_coords.tolist(),
+        "species": [site.specie.symbol for site in structure],
+    }
 
 
-def test_parse_xyz_molecule(client):
-    xyz = b"3\nwater\nO 0 0 0.1173\nH 0 0.7572 -0.4692\nH 0 -0.7572 -0.4692\n"
-    parsed = client.post("/api/parse", files={"file": ("water.xyz", xyz)}).json()
-    assert parsed["periodic"] is False
-    assert parsed["formula_pretty"] == "H2O"
-    assert parsed["lattice"] is None
+def test_symmetry_endpoint(client):
+    al2o3 = parse_structure((SAMPLES / "Al2O3_corundum.cif").read_text(), "x.cif")
+    res = client.post("/api/symmetry", json=_cell(al2o3)).json()
+    assert res == {
+        "spacegroup_symbol": "R-3c",
+        "spacegroup_number": 167,
+        "crystal_system": "trigonal",
+        "point_group": "-3m",
+    }
+    zno = parse_structure((SAMPLES / "ZnO_wurtzite.cif").read_text(), "x.cif")
+    assert client.post("/api/symmetry", json=_cell(zno)).json()["crystal_system"] == "hexagonal"
 
 
-def test_parse_rejects_bad_files(client):
-    assert client.post("/api/parse", files={"file": ("a.txt", b"hi")}).status_code == 422
-    assert client.post("/api/parse", files={"file": ("a.cif", b"garbage")}).status_code == 422
+def test_symmetry_rejects_bad_cells(client):
+    bad = {"lattice": [[1, 0, 0], [0, 1, 0], [0, 0, 1]], "frac": [[0, 0, 0]], "species": ["H", "H"]}
+    assert client.post("/api/symmetry", json=bad).status_code == 422
+    flat = {"lattice": [[1, 0, 0], [2, 0, 0], [0, 0, 1]], "frac": [[0, 0, 0]], "species": ["H"]}
+    assert client.post("/api/symmetry", json=flat).status_code == 422
+
+
+@pytest.mark.parametrize(
+    "formula,key",
+    [("Fe2O3", "Fe2O3"), ("O3Fe2", "Fe2O3"), ("Fe4O6", "Fe2O3"), ("LiCoO2", "CoLiO2"), ("Ca3(PO4)2", "Ca3O8P2"), ("Si", "Si")],
+)
+def test_formula_key(formula, key):
+    assert formula_key(parse_formula(formula)) == key
+
+
+@pytest.mark.parametrize("bad", ["Xx9", "fe2o3", "Fe(O", "Fe)2", ""])
+def test_formula_rejects(bad):
+    with pytest.raises(ValueError):
+        parse_formula(bad)
+
+
+def test_formula_key_matches_pymatgen():
+    # The key computed at import (pymatgen composition) must equal the key from parsing the search text.
+    for path in SAMPLES.glob("*.cif"):
+        structure = parse_structure(path.read_text(), path.name)
+        assert summarize(structure)["formula_key"] == formula_key(parse_formula(structure.composition.formula))
+
+
+def test_demo_fixture_loads_into_empty_db(tmp_path, monkeypatch):
+    engine = db.make_engine(f"sqlite:///{tmp_path / 'empty.db'}")
+    monkeypatch.setattr(db, "engine", engine)
+    monkeypatch.setattr(db, "SessionLocal", db.sessionmaker(bind=engine, expire_on_commit=False))
+    db.Base.metadata.create_all(engine)
+    assert db.load_demo_data() == 17
+    assert db.load_demo_data() == 0  # not loaded twice
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("postgres://u:p@h/db?sslmode=require", "postgresql+psycopg://u:p@h/db?sslmode=require"),
+        ("postgresql://u:p@h/db", "postgresql+psycopg://u:p@h/db"),
+        ("postgresql+psycopg://u@h/db", "postgresql+psycopg://u@h/db"),
+        ("sqlite:///x.db", "sqlite:///x.db"),
+    ],
+)
+def test_database_url_normalization(url, expected):
+    assert normalize_database_url(url) == expected

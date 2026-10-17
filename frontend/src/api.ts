@@ -1,3 +1,5 @@
+import { type Crystal, cartToFrac } from "./lib/structure";
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export interface MaterialSummary {
@@ -36,14 +38,11 @@ export interface MaterialPage {
   items: MaterialSummary[];
 }
 
-export interface ParsedStructure {
-  filename: string;
-  periodic: boolean;
-  formula_pretty: string;
-  nsites: number;
-  spacegroup_symbol: string | null;
-  spacegroup_number: number | null;
-  crystal_system: string | null;
+export interface SymmetryResult {
+  spacegroup_symbol: string;
+  spacegroup_number: number;
+  crystal_system: string;
+  point_group: string;
 }
 
 export class ApiError extends Error {
@@ -86,10 +85,19 @@ export const getMaterial = (id: string) => request<MaterialDetail>(`/api/materia
 export const downloadUrl = (id: string, fmt: "cif" | "poscar" | "xyz" | "json") =>
   `${BASE}/api/materials/${encodeURIComponent(id)}/download?fmt=${fmt}`;
 
-export function parseOnServer(text: string, filename: string) {
-  const body = new FormData();
-  body.append("file", new Blob([text]), filename);
-  return request<ParsedStructure>("/api/parse", { method: "POST", body });
+/** Space group of a periodic structure parsed in the browser (spglib on the server). */
+export function findSymmetry(crystal: Crystal) {
+  const lattice = crystal.lattice!;
+  const body = {
+    lattice,
+    frac: crystal.atoms.map((a) => cartToFrac(a.cart, lattice)),
+    species: crystal.atoms.map((a) => a.element),
+  };
+  return request<SymmetryResult>("/api/symmetry", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 export const API_DOCS_URL = `${BASE}/docs`;

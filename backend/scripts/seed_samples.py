@@ -1,16 +1,20 @@
-"""Write a set of well-known crystal structures to data/samples/ and load them into the DB.
+"""Write well-known crystal structures to data/samples/ and backend/app/demo_materials.json.
+
+The API loads demo_materials.json into an empty database on startup, so a fresh deploy is
+never empty.
 
 Lattice parameters and Wyckoff positions are standard experimental values from the
 crystallographic literature. No computed properties (band gap, energies) are attached:
 import real data with import_mp.py or import_files.py for that.
 
-    python -m scripts.seed_samples            # from backend/
-    python -m scripts.seed_samples --db-only  # skip writing data/samples (used in Docker)
+    python -m scripts.seed_samples        # from backend/: regenerate the files
+    python -m scripts.seed_samples --db   # also upsert into the configured database
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -19,8 +23,10 @@ from pymatgen.io.cif import CifWriter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.db import SessionLocal, init_db  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.db import DEMO_FIXTURE, SessionLocal, init_db  # noqa: E402
 from app.services.ingest import add_material  # noqa: E402
+from app.services.structure import summarize  # noqa: E402
 
 SAMPLES_DIR = Path(__file__).resolve().parents[2] / "data" / "samples"
 
@@ -102,33 +108,36 @@ H  -2.151390   1.242106   0.000000
 """
 
 
+NOTE = "Built from experimental lattice parameters (demo data)."
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed demo structures.")
-    parser.add_argument("--db-only", action="store_true", help="Only load the database")
+    parser = argparse.ArgumentParser(description="Generate demo structures.")
+    parser.add_argument("--db", action="store_true", help="Also upsert them into CMD_DATABASE_URL")
     args = parser.parse_args()
-    write_files = not args.db_only
-    if write_files:
-        SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
-    init_db()
-    with SessionLocal() as session:
-        for name, (structure, expected) in SAMPLES.items():
-            if len(structure) != expected:
-                raise SystemExit(f"{name}: expected {expected} sites, got {len(structure)}")
-            if write_files:
-                CifWriter(structure, symprec=0.01).write_file(SAMPLES_DIR / f"{name}.cif")
-            material = add_material(
-                session,
-                structure,
-                source="sample",
-                source_id=name,
-                extra={"note": "Built from experimental lattice parameters (demo data)."},
-            )
-            print(f"{material.id:8s} {material.formula_pretty:8s} {material.spacegroup_symbol}")
-        session.commit()
-    if write_files:
-        (SAMPLES_DIR / "water.xyz").write_text(WATER_XYZ)
-        (SAMPLES_DIR / "benzene.xyz").write_text(BENZENE_XYZ)
-        print(f"Wrote sample files to {SAMPLES_DIR}")
+
+    SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
+    fixture = []
+    for n, (name, (structure, expected)) in enumerate(SAMPLES.items(), start=1):
+        if len(structure) != expected:
+            raise SystemExit(f"{name}: expected {expected} sites, got {len(structure)}")
+        CifWriter(structure, symprec=0.01).write_file(SAMPLES_DIR / f"{name}.cif")
+        fixture.append(
+            {"id": f"cmd-{n}", **summarize(structure), "extra": {"note": NOTE}, "source": "sample", "source_id": name}
+        )
+    (SAMPLES_DIR / "water.xyz").write_text(WATER_XYZ)
+    (SAMPLES_DIR / "benzene.xyz").write_text(BENZENE_XYZ)
+    DEMO_FIXTURE.write_text(json.dumps(fixture, separators=(",", ":")) + "\n")
+    print(f"Wrote {len(SAMPLES)} samples to {SAMPLES_DIR} and {DEMO_FIXTURE.name}")
+
+    if args.db:
+        settings.load_demo_data = False
+        init_db()
+        with SessionLocal() as session:
+            for name, (structure, _) in SAMPLES.items():
+                material = add_material(session, structure, source="sample", source_id=name, extra={"note": NOTE})
+                print(f"{material.id:8s} {material.formula_pretty:8s} {material.spacegroup_symbol}")
+            session.commit()
 
 
 if __name__ == "__main__":

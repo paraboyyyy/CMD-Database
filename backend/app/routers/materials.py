@@ -2,14 +2,14 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from pymatgen.core import Composition, Element, Structure
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Material
 from ..schemas import MaterialDetail, MaterialPage
-from ..services.structure import EXPORT_FORMATS, export
+from ..services.export import EXPORT_FORMATS, export
+from ..services.formula import formula_key, parse_formula
 
 router = APIRouter(prefix="/api/materials", tags=["materials"])
 
@@ -62,13 +62,10 @@ def search_materials(
 
     if formula:
         try:
-            comp = Composition(formula)
-            if not all(isinstance(el, Element) for el in comp.elements):
-                raise ValueError
-            reduced = comp.reduced_formula
-        except Exception:
-            raise HTTPException(422, f"Invalid formula: {formula}")
-        stmt = stmt.where(Material.formula_reduced == reduced)
+            key = formula_key(parse_formula(formula))
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        stmt = stmt.where(Material.formula_key == key)
     if chemsys:
         stmt = stmt.where(Material.chemsys == "-".join(_split_elements(chemsys)))
     for el in _split_elements(elements or ""):
@@ -117,11 +114,10 @@ def download_material(
     fmt: Literal["cif", "poscar", "xyz", "json"] = "cif",
 ):
     material = _get(session, material_id)
-    structure = Structure.from_dict(material.structure)
     media_type, ext = EXPORT_FORMATS[fmt]
-    filename = f"{material.id}_{material.formula_pretty}.{ext}"
+    name = f"{material.id}_{material.formula_pretty}"
     return Response(
-        export(structure, fmt),
+        export(material.structure, material.lattice, fmt, name),
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f'attachment; filename="{name}.{ext}"'},
     )

@@ -1,0 +1,3 @@
+# Import scripts (scripts/*.py): runtime + pymatgen.
+-r ../requirements.txt
+pymatgen>=2024.10

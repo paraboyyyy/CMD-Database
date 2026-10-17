@@ -1,4 +1,7 @@
-"""Structure parsing, symmetry analysis and format conversion (pymatgen + spglib)."""
+"""Structure parsing and analysis with pymatgen, used by the import scripts.
+
+Not imported by the API at runtime: pymatgen is too large for serverless hosting.
+"""
 
 from __future__ import annotations
 
@@ -6,18 +9,9 @@ import warnings
 from pathlib import PurePath
 
 from pymatgen.core import Lattice, Molecule, Structure
-from pymatgen.io.cif import CifWriter
-from pymatgen.io.vasp import Poscar
-from pymatgen.io.xyz import XYZ
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
-EXPORT_FORMATS = {
-    "cif": ("text/plain", "cif"),
-    "poscar": ("text/plain", "vasp"),
-    "xyz": ("text/plain", "xyz"),
-    "json": ("application/json", "json"),
-}
-
+from .formula import formula_key
 
 class StructureParseError(ValueError):
     pass
@@ -88,6 +82,7 @@ def summarize(structure: Structure, symprec: float = 0.01) -> dict:
         "formula_pretty": comp.reduced_formula,
         "formula_reduced": comp.reduced_formula,
         "formula_anonymous": comp.anonymized_formula,
+        "formula_key": formula_key(comp.get_el_amt_dict()),
         "chemsys": "-".join(elements),
         "elements_key": "," + ",".join(elements) + ",",
         "elements": elements,
@@ -99,15 +94,3 @@ def summarize(structure: Structure, symprec: float = 0.01) -> dict:
         "density": float(structure.density),
         "structure": structure.as_dict(),
     }
-
-
-def export(structure: Structure, fmt: str) -> str:
-    if fmt == "cif":
-        return str(CifWriter(structure, symprec=0.01))
-    if fmt == "poscar":
-        return Poscar(structure).get_str()
-    if fmt == "xyz":
-        return str(XYZ(Molecule(structure.species, structure.cart_coords)))
-    if fmt == "json":
-        return structure.to_json()
-    raise ValueError(f"Unknown format {fmt}")

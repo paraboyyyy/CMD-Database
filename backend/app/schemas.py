@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LatticeOut(BaseModel):
@@ -51,16 +51,17 @@ class MaterialPage(BaseModel):
     items: list[MaterialSummary]
 
 
-class ParsedStructure(BaseModel):
-    """Result of parsing an uploaded file. `periodic` is False for .xyz molecules."""
+class SymmetryRequest(BaseModel):
+    """A periodic cell: lattice rows a, b, c (Å), fractional coordinates and element symbols."""
 
-    filename: str
-    periodic: bool
-    formula_pretty: str
-    nsites: int
-    spacegroup_symbol: str | None = None
-    spacegroup_number: int | None = None
-    crystal_system: str | None = None
-    lattice: LatticeOut | None = None
-    density: float | None = None
-    structure: dict
+    lattice: list[list[float]] = Field(min_length=3, max_length=3)
+    frac: list[list[float]] = Field(min_length=1, max_length=20000)
+    species: list[str]
+    symprec: float = Field(0.01, gt=0, le=1)
+
+
+class SymmetryResult(BaseModel):
+    spacegroup_symbol: str
+    spacegroup_number: int
+    crystal_system: str
+    point_group: str

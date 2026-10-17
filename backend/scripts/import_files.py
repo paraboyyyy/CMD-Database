@@ -15,6 +15,7 @@ from pymatgen.core import Structure
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import settings  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
 from app.services.ingest import add_material  # noqa: E402
 from app.services.structure import StructureParseError, parse_structure  # noqa: E402
@@ -32,6 +33,7 @@ def main() -> None:
     if not files:
         raise SystemExit(f"No structure files found in {args.folder}")
 
+    settings.load_demo_data = False
     init_db()
     ok = failed = 0
     with SessionLocal() as session:

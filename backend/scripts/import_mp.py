@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import settings  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
 from app.services.ingest import add_material  # noqa: E402
 
@@ -64,6 +65,7 @@ def main() -> None:
     with MPRester(api_key) as mpr:
         docs = mpr.materials.summary.search(**query, num_chunks=None)
 
+    settings.load_demo_data = False
     init_db()
     with SessionLocal() as session:
         for doc in docs[: args.max]:

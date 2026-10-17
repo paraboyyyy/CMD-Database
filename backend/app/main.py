@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .db import init_db
-from .routers import materials, parse
+from .routers import materials, symmetry
 
 
 @asynccontextmanager
@@ -16,7 +16,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="CMD Database API",
-    description="Search crystal structures and material properties; parse structure files.",
+    description="Search crystal structures and material properties; analyze crystal symmetry.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(materials.router)
-app.include_router(parse.router)
+app.include_router(symmetry.router)
 
 
 @app.get("/api/health", tags=["meta"])

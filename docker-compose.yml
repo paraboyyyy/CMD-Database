@@ -13,10 +13,11 @@ services:
       retries: 20
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       CMD_DATABASE_URL: postgresql+psycopg://cmd:cmd@db:5432/cmd
-      MP_API_KEY: ${MP_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
