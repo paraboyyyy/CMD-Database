@@ -7,6 +7,7 @@ import SearchPage from "./pages/SearchPage";
 // Pages with the 3D viewer pull in three.js, so load them on demand.
 const MaterialPage = lazy(() => import("./pages/MaterialPage"));
 const ViewerPage = lazy(() => import("./pages/ViewerPage"));
+const BuilderPage = lazy(() => import("./pages/BuilderPage"));
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             Materials
           </NavLink>
           <NavLink to="/viewer">Viewer</NavLink>
+          <NavLink to="/builder">Builder</NavLink>
           <a href={API_DOCS_URL} target="_blank" rel="noreferrer">
             API
           </a>
@@ -33,6 +35,7 @@ export default function App() {
             <Route path="/" element={<SearchPage />} />
             <Route path="/materials/:id" element={<MaterialPage />} />
             <Route path="/viewer" element={<ViewerPage />} />
+            <Route path="/builder" element={<BuilderPage />} />
             <Route
               path="*"
               element={

@@ -1,7 +1,9 @@
 import { type DragEvent, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { type SymmetryResult, findSymmetry } from "../api";
 import { SpaceGroup } from "../components/Formula";
 import OpenmxExportDialog from "../components/OpenmxExportDialog";
+import { IMPORT_KEY, stateFromCrystal } from "../lib/builder";
 import { ACCEPTED_FILES, parseStructureFile } from "../lib/parsers";
 import { type Crystal, formula, latticeParams } from "../lib/structure";
 import StructureViewer from "../viewer/StructureViewer";
@@ -25,6 +27,7 @@ export default function ViewerPage() {
   const [dragging, setDragging] = useState(false);
   const [symmetry, setSymmetry] = useState<SymmetryResult | string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const open = (text: string, name: string) => {
@@ -137,6 +140,17 @@ export default function ViewerPage() {
             {first!.lattice && (
               <button type="button" onClick={() => setExporting(true)}>
                 Export OpenMX (.dat)…
+              </button>
+            )}
+            {first!.lattice && (
+              <button
+                type="button"
+                onClick={() => {
+                  sessionStorage.setItem(IMPORT_KEY, JSON.stringify(stateFromCrystal(first!, loaded.name.replace(/\.[^.]+$/, ""))));
+                  navigate("/builder");
+                }}
+              >
+                Edit in Builder
               </button>
             )}
             {symmetry && typeof symmetry !== "string" && (

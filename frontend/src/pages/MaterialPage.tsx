@@ -136,6 +136,9 @@ export default function MaterialPage() {
             <button type="button" className="primary" onClick={() => setExporting(true)}>
               OpenMX (.dat)…
             </button>
+            <Link className="button" to={`/builder?from=${m.id}`}>
+              Edit in Builder
+            </Link>
           </div>
           {exporting && (
             <OpenmxExportDialog

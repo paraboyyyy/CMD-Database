@@ -179,7 +179,15 @@ export default function SearchPage() {
           {loading && <span className="muted small">Loading…</span>}
         </div>
         {error && <p className="error">{error}</p>}
-        {result && result.items.length === 0 && <p className="muted">No materials match these filters.</p>}
+        {result && result.items.length === 0 && (
+          <div className="empty-state">
+            <p className="muted">No materials match these filters.</p>
+            <p>
+              Can’t find it? <Link to="/builder">Build the structure yourself</Link> from a template, a similar material
+              or your own coordinates.
+            </p>
+          </div>
+        )}
         {result && result.items.length > 0 && (
           <div className="table-wrap">
             <table>

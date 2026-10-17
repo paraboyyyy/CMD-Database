@@ -10,6 +10,8 @@ interface Props {
   /** Used for the PNG file name. */
   name?: string;
   compact?: boolean;
+  /** Keep the camera when `frames` changes (live editing). Remount with a new key to re-frame. */
+  preserveView?: boolean;
 }
 
 function readColors(): SceneColors {
@@ -21,7 +23,7 @@ function readColors(): SceneColors {
   };
 }
 
-export default function StructureViewer({ frames, name = "structure", compact = false }: Props) {
+export default function StructureViewer({ frames, name = "structure", compact = false, preserveView = false }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CrystalScene | null>(null);
   const [options, setOptions] = useState<ViewOptions>(DEFAULT_OPTIONS);
@@ -57,10 +59,10 @@ export default function StructureViewer({ frames, name = "structure", compact = 
   // Parents give each file its own `key`, so frame/playing state resets with it.
   const shownFrames = useRef<Crystal[] | null>(null);
   useEffect(() => {
-    const keepView = shownFrames.current === frames;
+    const keepView = shownFrames.current === frames || (preserveView && shownFrames.current !== null);
     shownFrames.current = frames;
     sceneRef.current?.setStructure(crystal, keepView);
-  }, [frames, crystal]);
+  }, [frames, crystal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => sceneRef.current?.setOptions(options), [options]);
 

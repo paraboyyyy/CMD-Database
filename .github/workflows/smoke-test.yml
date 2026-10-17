@@ -42,6 +42,8 @@ jobs:
           check "/api/materials/$id/download?fmt=cif"   200 '_cell_length_a'
           check "/api/materials/$id/download?fmt=poscar" 200 'Direct'
           check "/api/elements?with=O"                 200 '"counts"'
+          check /api/spacegroups                        200 '"Fm-3m"'
+          check /builder                                200 'id="root"'
           check /api/materials/does-not-exist           404 'not found'
           check /openapi.json                           200 'CMD Database API'
           check /docs                                   200 'swagger'
@@ -64,3 +66,10 @@ jobs:
             "species": ["Na","Na","Na","Na","Cl","Cl","Cl","Cl"]}' | tee /tmp/sym
           echo
           grep -q '"spacegroup_number":225' /tmp/sym
+      - name: Builder (space-group expansion)
+        run: |
+          curl -sS -X POST "$URL/api/build" -H 'content-type: application/json' -d '{
+            "hall": 523, "lattice": {"a": 5.64, "b": 5.64, "c": 5.64, "alpha": 90, "beta": 90, "gamma": 90},
+            "sites": [{"element": "Na", "frac": [0, 0, 0]}, {"element": "Cl", "frac": [0.5, 0.5, 0.5]}]}' | tee /tmp/build
+          echo
+          grep -q '"multiplicities":\[4,4\]' /tmp/build

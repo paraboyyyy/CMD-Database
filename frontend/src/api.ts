@@ -1,4 +1,5 @@
-import { type Crystal, cartToFrac } from "./lib/structure";
+import type { BuildResult, SpacegroupInfo } from "./lib/builder";
+import { type Crystal, type LatticeParams, type Vec3, cartToFrac } from "./lib/structure";
 
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
@@ -58,7 +59,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(BASE + path, init);
-  } catch {
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
     throw new ApiError("Cannot reach the CMD Database API. Is the backend running?", 0);
   }
   if (!res.ok) {
@@ -117,6 +119,27 @@ export function getElementCounts(withElements: string) {
     elementCountsCache.set(withElements, pending);
   }
   return pending;
+}
+
+const spacegroupsPromise: { current: Promise<SpacegroupInfo[]> | null } = { current: null };
+
+/** All 230 space groups with their settings (fetched once). */
+export function getSpacegroups() {
+  if (!spacegroupsPromise.current) {
+    spacegroupsPromise.current = request<SpacegroupInfo[]>("/api/spacegroups");
+    spacegroupsPromise.current.catch(() => (spacegroupsPromise.current = null));
+  }
+  return spacegroupsPromise.current;
+}
+
+/** Expand symmetry-inequivalent sites into a full cell (spglib on the server). */
+export function buildStructure(body: { hall: number; lattice: LatticeParams; sites: { element: string; frac: Vec3 }[] }, signal?: AbortSignal) {
+  return request<BuildResult>("/api/build", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
 }
 
 export const API_DOCS_URL = `${BASE}/docs`;

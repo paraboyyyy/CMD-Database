@@ -20,6 +20,12 @@ viewer struktur kristal 3D di browser (mirip OpenMX Viewer).
     H/S untuk Fe, Co, Ni, Cu, Zn. Unsur di luar tabel diisi manual dan diingat browser.
     Tersedia juga di halaman detail material.
   - Tema terang dan gelap otomatis
+- **Builder** (`/builder`): buat material sendiri. Pilih space group (230, termasuk setting/origin choice),
+  parameter kisi (otomatis dikunci sesuai sistem kristal), dan posisi atom yang tidak ekuivalen; atom
+  ekuivalen dibangkitkan dengan operasi simetri spglib. Mulai dari template (FCC, BCC, HCP, intan, rock salt,
+  CsCl, zinc blende, wurtzite, fluorite, perovskite, rutile, grafit, MoS2), material di database, atau file.
+  Substitusi unsur, supercell, vakansi/doping (expand ke P1), deteksi simetri, peringatan atom bertumpuk,
+  ekspor CIF/POSCAR/XYZ/OpenMX, dan "My structures" yang tersimpan di browser.
 
 ## Arsitektur
 
@@ -119,6 +125,9 @@ Hapus data contoh dengan `python -m scripts.remove_demo`.
 | `GET /api/materials/{id}` | Detail lengkap termasuk struktur (format pymatgen) |
 | `GET /api/materials/{id}/download?fmt=cif\|poscar\|xyz\|json` | Unduh struktur |
 | `POST /api/symmetry` | Space group dari sel (`lattice`, `frac`, `species`) memakai spglib |
+| `GET /api/spacegroups` | 230 space group beserta setting-nya (nomor Hall) |
+| `POST /api/build` | Bangkitkan sel lengkap dari space group (`hall`), parameter kisi, dan situs tak ekuivalen |
+| `GET /api/elements?with=` | Jumlah material per unsur (untuk heatmap tabel periodik) |
 
 ## Tes
 

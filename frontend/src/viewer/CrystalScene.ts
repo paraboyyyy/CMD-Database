@@ -372,7 +372,11 @@ export class CrystalScene {
     for (const p of pts) radius = Math.max(radius, target.distanceTo(new THREE.Vector3(...p)));
     radius = Math.max(radius + 1.5, 3);
 
-    const fov = (this.perspective.fov * Math.PI) / 180;
+    // Fit the bounding sphere in whichever field of view is narrower (tall panels are width-limited).
+    const { clientWidth: w, clientHeight: h } = this.container;
+    const aspect = w && h ? w / h : 1;
+    const vfov = (this.perspective.fov * Math.PI) / 180;
+    const fov = Math.min(vfov, 2 * Math.atan(Math.tan(vfov / 2) * aspect));
     const dist = radius / Math.sin(fov / 2);
     // A slightly rotated default view shows the 3D shape of the cell.
     const dir = new THREE.Vector3(0.9, -1.6, 0.7).normalize();
@@ -382,7 +386,7 @@ export class CrystalScene {
       cam.lookAt(target);
     }
     this.ortho.zoom = 1;
-    this.orthoHalfHeight = radius * 1.05;
+    this.orthoHalfHeight = (radius * 1.05) / Math.min(1, aspect);
     this.perspective.far = dist * 10;
     this.perspective.updateProjectionMatrix();
     this.updateOrtho();
