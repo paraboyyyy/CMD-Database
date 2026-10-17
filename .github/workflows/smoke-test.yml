@@ -1,0 +1,52 @@
+name: Smoke test
+
+# Checks that the live site and API answer correctly. Run it from the Actions tab after a deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Site URL"
+        default: "https://cmd-database.vercel.app"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      URL: ${{ inputs.url }}
+    steps:
+      - name: Pages and API
+        run: |
+          set -u
+          fail=0
+          check() {  # path, expected status, expected text in body
+            body=$(curl -sS -L -o /tmp/body -w "%{http_code} %{time_total}" "$URL$1") || { echo "FAIL $1 (connection)"; fail=1; return; }
+            code=${body% *}; time=${body#* }
+            if [ "$code" = "$2" ] && grep -q -- "$3" /tmp/body; then
+              echo "ok   $code ${time}s  $1"
+            else
+              echo "FAIL $code ${time}s  $1 (expected $2 and '$3')"; head -c 400 /tmp/body; echo; fail=1
+            fi
+          }
+          check /                                       200 'id="root"'
+          check /viewer                                 200 'id="root"'
+          check /materials/cmd-5                        200 'id="root"'
+          check /api/health                             200 '"ok"'
+          check "/api/materials?limit=1"                200 '"total"'
+          check "/api/materials?q=Al2O3"                200 'Al2O3'
+          check "/api/materials?formula=O2LiCo"         200 'LiCoO2'
+          check /api/materials/cmd-16                   200 'R-3c'
+          check "/api/materials/cmd-5/download?fmt=cif" 200 '_cell_length_a'
+          check /api/materials/does-not-exist           404 'not found'
+          check /openapi.json                           200 'CMD Database API'
+          check /docs                                   200 'swagger'
+          echo
+          echo "Materials in database:"; curl -sS "$URL/api/materials?limit=1" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])"
+          exit $fail
+      - name: Space group (spglib)
+        run: |
+          curl -sS -X POST "$URL/api/symmetry" -H 'content-type: application/json' -d '{
+            "lattice": [[5.64,0,0],[0,5.64,0],[0,0,5.64]],
+            "frac": [[0,0,0],[0.5,0.5,0],[0.5,0,0.5],[0,0.5,0.5],[0.5,0.5,0.5],[0,0,0.5],[0,0.5,0],[0.5,0,0]],
+            "species": ["Na","Na","Na","Na","Cl","Cl","Cl","Cl"]}' | tee /tmp/sym
+          echo
+          grep -q '"spacegroup_number":225' /tmp/sym
