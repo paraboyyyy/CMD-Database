@@ -69,6 +69,23 @@ def test_p1_keeps_sites_and_detects_higher_symmetry():
     assert res["detected"]["spacegroup_number"] == 221
 
 
+def test_atoms_carry_the_rotation_that_generated_them():
+    import numpy as np
+
+    site = [0.3064, 0.0, 0.25]
+    body = {"hall": hall_of(167, "H"), "lattice": hexagonal(4.759, 12.991), "sites": [{"element": "O", "frac": site}]}
+    res = client.post("/api/build", json=body).json()
+    for atom in res["atoms"]:
+        rot = np.array(atom["rotation"]).reshape(3, 3)
+        # R·site differs from the atom only by a lattice translation + the centring/screw part,
+        # and a small move d of the site moves this image by R·d.
+        assert abs(round(np.linalg.det(rot))) == 1
+        d = np.array([0.01, 0.0, 0.0])
+        moved = client.post("/api/build", json={**body, "sites": [{"element": "O", "frac": (np.array(site) + d).tolist()}]}).json()
+        target = (np.array(atom["frac"]) + rot @ d) % 1.0
+        assert any(np.allclose((np.array(m["frac"]) - target + 0.5) % 1.0 - 0.5, 0, atol=1e-6) for m in moved["atoms"])
+
+
 def test_rhombohedral_setting():
     lattice = {"a": 5.13, "b": 5.13, "c": 5.13, "alpha": 55.3, "beta": 55.3, "gamma": 55.3}
     body = {"hall": hall_of(167, "R"), "lattice": lattice, "sites": [{"element": "Al", "frac": [0.3523] * 3}]}

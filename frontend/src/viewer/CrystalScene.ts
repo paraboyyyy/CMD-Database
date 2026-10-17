@@ -97,6 +97,16 @@ export class CrystalScene {
 
   onSelect: (atoms: DisplayAtom[]) => void = () => {};
 
+  /** Edit mode: atoms can be dragged, clicks on empty space report a position. */
+  editable = false;
+  /** Atom `source` (index in the crystal) was dragged by `delta` (Cartesian Å). */
+  onAtomDrag: (source: number, delta: Vec3) => void = () => {};
+  /** Click on empty space in edit mode, at a point on the view plane through the cell centre. */
+  onBackgroundClick: (cart: Vec3) => void = () => {};
+  /** Click on an atom in edit mode (crystal atom index). */
+  onAtomClick: (source: number) => void = () => {};
+  private drag: { display: number; plane: THREE.Plane; start: THREE.Vector3; current: THREE.Vector3 } | null = null;
+
   constructor(private container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -118,7 +128,9 @@ export class CrystalScene {
     this.controls.addEventListener("change", () => this.requestRender());
 
     const canvas = this.renderer.domElement;
-    canvas.addEventListener("pointerdown", (e) => (this.pointerDown = { x: e.clientX, y: e.clientY }));
+    // Capture phase, so an atom drag can switch off OrbitControls before it starts rotating.
+    canvas.addEventListener("pointerdown", (e) => this.handlePointerDown(e), true);
+    canvas.addEventListener("pointermove", (e) => this.handlePointerMove(e));
     canvas.addEventListener("pointerup", (e) => this.handleClick(e));
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -430,21 +442,88 @@ export class CrystalScene {
 
   // ---------------------------------------------------------------- picking
 
-  private handleClick(e: PointerEvent) {
-    const start = this.pointerDown;
-    this.pointerDown = null;
-    if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4 || !this.atomMesh) return;
+  private raycaster(clientX: number, clientY: number): THREE.Raycaster {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ndc = new THREE.Vector2(
-      ((e.clientX - rect.left) / rect.width) * 2 - 1,
-      -((e.clientY - rect.top) / rect.height) * 2 + 1,
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
     );
     const ray = new THREE.Raycaster();
     ray.setFromCamera(ndc, this.camera);
-    const hit = ray.intersectObject(this.atomMesh)[0];
-    const i = hit?.instanceId;
+    return ray;
+  }
+
+  private hitDisplayAtom(clientX: number, clientY: number): number | null {
+    if (!this.atomMesh) return null;
+    return this.raycaster(clientX, clientY).intersectObject(this.atomMesh)[0]?.instanceId ?? null;
+  }
+
+  /** Crystal atom index under the cursor, or null. */
+  pickAtom(clientX: number, clientY: number): number | null {
+    const i = this.hitDisplayAtom(clientX, clientY);
+    return i === null ? null : this.displayAtoms[i].index;
+  }
+
+  /** Point under the cursor on the plane facing the camera through the view centre. */
+  pointOnViewPlane(clientX: number, clientY: number): Vec3 {
+    const normal = this.camera.getWorldDirection(new THREE.Vector3());
+    const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, this.controls.target);
+    const p = this.raycaster(clientX, clientY).ray.intersectPlane(plane, new THREE.Vector3()) ?? this.controls.target.clone();
+    return [p.x, p.y, p.z];
+  }
+
+  private handlePointerDown(e: PointerEvent) {
+    this.pointerDown = { x: e.clientX, y: e.clientY };
+    if (!this.editable || e.button !== 0) return;
+    const i = this.hitDisplayAtom(e.clientX, e.clientY);
+    if (i === null) return;
+    const start = new THREE.Vector3(...this.displayAtoms[i].cart);
+    const normal = this.camera.getWorldDirection(new THREE.Vector3());
+    this.drag = { display: i, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, start), start, current: start.clone() };
+    this.controls.enabled = false;
+    this.renderer.domElement.setPointerCapture(e.pointerId);
+    this.renderer.domElement.style.cursor = "grabbing";
+  }
+
+  private handlePointerMove(e: PointerEvent) {
+    const canvas = this.renderer.domElement;
+    if (!this.drag) {
+      if (this.editable && e.buttons === 0) canvas.style.cursor = this.hitDisplayAtom(e.clientX, e.clientY) === null ? "" : "grab";
+      return;
+    }
+    const p = this.raycaster(e.clientX, e.clientY).ray.intersectPlane(this.drag.plane, new THREE.Vector3());
+    if (!p || !this.atomMesh) return;
+    this.drag.current.copy(p);
+    // Move just this instance while dragging; bonds and symmetry images update on release.
+    const a = this.displayAtoms[this.drag.display];
+    const r = atomRadius(a.element, this.options.style, this.options.atomScale);
+    this.atomMesh.setMatrixAt(this.drag.display, new THREE.Matrix4().makeScale(r, r, r).setPosition(p));
+    this.atomMesh.instanceMatrix.needsUpdate = true;
+    this.requestRender();
+  }
+
+  private handleClick(e: PointerEvent) {
+    const start = this.pointerDown;
+    this.pointerDown = null;
+    if (this.drag) {
+      const { display, start: from, current } = this.drag;
+      this.drag = null;
+      this.controls.enabled = true;
+      this.renderer.domElement.style.cursor = "";
+      if (current.distanceTo(from) > 0.02) {
+        const d = current.clone().sub(from);
+        this.onAtomDrag(this.displayAtoms[display].index, [d.x, d.y, d.z]);
+        return;
+      }
+    }
+    if (!start || Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4 || !this.atomMesh) return;
+    const i = this.hitDisplayAtom(e.clientX, e.clientY);
+    if (this.editable) {
+      if (i === null) this.onBackgroundClick(this.pointOnViewPlane(e.clientX, e.clientY));
+      else this.onAtomClick(this.displayAtoms[i].index);
+    }
     // Click toggles an atom; up to 4 atoms give distance, angle and dihedral. Empty space clears.
-    if (i === undefined) this.selected = [];
+    if (i === null) this.selected = [];
     else if (this.selected.includes(i)) this.selected = this.selected.filter((s) => s !== i);
     else this.selected = this.selected.length >= 4 ? [i] : [...this.selected, i];
     this.updateHighlight();

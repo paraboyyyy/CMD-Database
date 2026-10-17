@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { constrainLattice, p1Crystal, stateFromCrystal, substitute, supercell, TEMPLATES } from "./builder";
+import { addSite, constrainLattice, moveAtom, p1Crystal, removeAtom, setAtomElement, stateFromCrystal, substitute, supercell, TEMPLATES } from "./builder";
 import { parseStructureFile } from "./parsers";
 import { formula, latticeParams, norm, sub } from "./structure";
 import { toCif, toPoscar, toXyz } from "./writers";
@@ -76,5 +76,47 @@ describe("writers round-trip through the parsers", () => {
       const match = back.atoms.find((b) => b.element === a.element && norm(sub(a.cart, b.cart)) < 1e-5);
       expect(match).toBeDefined();
     }
+  });
+});
+
+describe("direct editing", () => {
+  const state = { name: "x", spacegroup: 1, hall: 1, params: base, sites: [
+    { element: "Na", frac: [0.1, 0.2, 0.3] as [number, number, number] },
+    { element: "Cl", frac: [0.5, 0.5, 0.5] as [number, number, number] },
+  ] };
+
+  it("moves a P1 atom and wraps it into the cell", () => {
+    const moved = moveAtom(state, null, 0, [-0.2, 0.05, 0]);
+    expect(moved.sites[0].frac).toEqual([0.9, 0.25, 0.3]);
+    expect(moved.sites[1]).toEqual(state.sites[1]);
+  });
+
+  it("snaps to a grid", () => {
+    expect(moveAtom(state, null, 0, [0.02, 0.04, 0.2], 8).sites[0].frac).toEqual([0.125, 0.25, 0.5]);
+  });
+
+  it("maps a drag of a symmetry image back to its site", () => {
+    // Atom 1 is the image of site 0 under a 4-fold rotation (x,y,z) -> (-y,x,z).
+    const result = {
+      spacegroup: { number: 75, symbol: "P4", choice: "" },
+      lattice: null,
+      atoms: [
+        { element: "Na", frac: [0.1, 0.2, 0.3] as [number, number, number], site: 0, rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1] },
+        { element: "Na", frac: [0.8, 0.1, 0.3] as [number, number, number], site: 0, rotation: [0, -1, 0, 1, 0, 0, 0, 0, 1] },
+      ],
+      multiplicities: [2],
+      detected: null,
+      warnings: [],
+    };
+    // Moving the image along +x by 0.1 means moving the site along -y by 0.1 (R⁻¹ of the 4-fold).
+    const moved = moveAtom(state, result, 1, [0.1, 0, 0]);
+    expect(moved.sites[0].frac).toEqual([0.1, 0.1, 0.3]);
+  });
+
+  it("adds, retypes and removes sites", () => {
+    const added = addSite(state, "O", [1.25, -0.5, 0.5]);
+    expect(added.sites[2]).toEqual({ element: "O", frac: [0.25, 0.5, 0.5] });
+    expect(setAtomElement(state, null, 1, "Br").sites[1].element).toBe("Br");
+    expect(removeAtom(state, null, 0).sites.map((s) => s.element)).toEqual(["Cl"]);
   });
 });

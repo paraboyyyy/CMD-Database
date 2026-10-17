@@ -1,23 +1,8 @@
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { type ElementCounts, getElementCounts } from "../api";
-import { CATEGORY_LABELS, ELEMENT_DETAILS, type ElementCategory, type ElementDetails } from "../lib/elementDetails";
+import { CATEGORY_LABELS, ELEMENT_DETAILS, type ElementCategory, type ElementDetails, periodicPosition } from "../lib/elementDetails";
 
-// [row, column] in an 18-column grid. Rows 9 and 10 hold the lanthanides and actinides.
-function position(z: number): [number, number] {
-  if (z === 1) return [1, 1];
-  if (z === 2) return [1, 18];
-  if (z <= 10) return [2, z <= 4 ? z - 2 : z + 8];
-  if (z <= 18) return [3, z <= 12 ? z - 10 : z];
-  if (z <= 36) return [4, z - 18];
-  if (z <= 54) return [5, z - 36];
-  if (z >= 57 && z <= 71) return [9, z - 54];
-  if (z >= 89 && z <= 103) return [10, z - 86];
-  if (z <= 56) return [6, z - 54];
-  if (z <= 86) return [6, z - 68];
-  return [7, z - 86];
-}
-
-const PLACED = ELEMENT_DETAILS.map((e) => ({ ...e, pos: position(e.z) }));
+const PLACED = ELEMENT_DETAILS.map((e) => ({ ...e, pos: periodicPosition(e.z) }));
 const AT = new Map(PLACED.map((e) => [`${e.pos[0]},${e.pos[1]}`, e]));
 const CATEGORIES = Object.keys(CATEGORY_LABELS) as ElementCategory[];
 
