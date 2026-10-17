@@ -1101,3 +1101,27 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+.segmented.quality {
+  display: flex;
+}
+.segmented.quality button {
+  flex: 1;
+}
+.species-table select {
+  width: 100%;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  padding: 0.25rem 0.3rem;
+}
+.tag {
+  display: inline-block;
+  margin-left: 0.3rem;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  vertical-align: middle;
+  background: var(--danger-soft);
+  color: var(--danger);
+}

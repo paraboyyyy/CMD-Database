@@ -8,9 +8,43 @@ import {
   speciesOrder,
   writeOpenmxDat,
 } from "../lib/openmx";
+import {
+  type BasisQuality,
+  OPENMX_PAO_TABLE,
+  QUALITY_LABELS,
+  presetSpecies,
+} from "../lib/openmxPresets";
 import type { Crystal, Vec3 } from "../lib/structure";
 
 const SPECIES_KEY = "cmd-openmx-species";
+const PREFS_KEY = "cmd-openmx-prefs";
+
+interface Prefs {
+  quality: BasisQuality;
+  vps: Record<string, string>; // chosen VPS for elements with several (Fe_PBE19H / Fe_PBE19S ...)
+}
+
+function loadPrefs(): Prefs {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
+    return { quality: p.quality ?? "standard", vps: p.vps ?? {} };
+  } catch {
+    return { quality: "standard", vps: {} };
+  }
+}
+
+function savePrefs(prefs: Prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+/** Table preset for elements in the OpenMX manual; the user's saved entry otherwise. */
+function initialSpecies(el: string, prefs: Prefs, saved: Record<string, OpenmxSpecies>): OpenmxSpecies {
+  return presetSpecies(el, prefs.quality, prefs.vps[el]) ?? saved[el] ?? { pao: "", vps: "", valence: null };
+}
 
 function loadSpecies(): Record<string, OpenmxSpecies> {
   try {
@@ -37,9 +71,11 @@ interface Props {
 export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const elements = useMemo(() => speciesOrder(crystal), [crystal]);
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   const [o, setO] = useState<OpenmxOptions>(() => {
     const saved = loadSpecies();
-    const species = Object.fromEntries(elements.map((el) => [el, saved[el] ?? { pao: "", vps: "", valence: null }]));
+    const p = loadPrefs();
+    const species = Object.fromEntries(elements.map((el) => [el, initialSpecies(el, p, saved)]));
     return { ...defaultOptions(crystal, name), species };
   });
   const [copied, setCopied] = useState(false);
@@ -52,9 +88,22 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
   const setSpecies = (el: string, patch: Partial<OpenmxSpecies>) =>
     setO((p) => {
       const species = { ...p.species, [el]: { ...p.species[el], ...patch } };
-      saveSpecies({ [el]: species[el] });
+      // Only elements without a table preset are remembered; table elements follow the preset.
+      if (!OPENMX_PAO_TABLE[el]) saveSpecies({ [el]: species[el] });
       return { ...p, species };
     });
+  const applyPrefs = (next: Prefs) => {
+    setPrefs(next);
+    savePrefs(next);
+    setO((p) => {
+      const species = { ...p.species };
+      for (const el of elements) {
+        const preset = presetSpecies(el, next.quality, next.vps[el]);
+        if (preset) species[el] = preset;
+      }
+      return { ...p, species };
+    });
+  };
   const setRepeat = (i: number, value: number) => {
     const repeat = [...o.repeat] as Vec3;
     repeat[i] = Math.min(Math.max(Math.round(value) || 1, 1), 6);
@@ -136,7 +185,19 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
           </fieldset>
 
           <fieldset>
-            <legend>Species (from your DFT_DATA folder)</legend>
+            <legend>Basis set (PAO) and pseudopotentials</legend>
+            <div className="segmented quality" role="radiogroup" aria-label="Basis quality">
+              {(Object.keys(QUALITY_LABELS) as BasisQuality[]).map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  aria-pressed={prefs.quality === q}
+                  onClick={() => applyPrefs({ ...prefs, quality: q })}
+                >
+                  {QUALITY_LABELS[q]}
+                </button>
+              ))}
+            </div>
             <table className="species-table">
               <thead>
                 <tr>
@@ -149,9 +210,17 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
               <tbody>
                 {elements.map((el) => {
                   const s = o.species[el];
+                  const options = OPENMX_PAO_TABLE[el];
                   return (
                     <tr key={el} className={missing.includes(el) ? "is-missing" : ""}>
-                      <th>{el}</th>
+                      <th>
+                        {el}
+                        {!options && (
+                          <span className="tag" title="Not in the OpenMX recommended table: enter it yourself">
+                            manual
+                          </span>
+                        )}
+                      </th>
                       <td>
                         <input
                           aria-label={`${el} PAO`}
@@ -161,12 +230,26 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
                         />
                       </td>
                       <td>
-                        <input
-                          aria-label={`${el} VPS`}
-                          placeholder={`${el}_PBE19`}
-                          value={s.vps}
-                          onChange={(e) => setSpecies(el, { vps: e.target.value.trim() })}
-                        />
+                        {options && options.length > 1 ? (
+                          <select
+                            aria-label={`${el} VPS`}
+                            value={s.vps}
+                            onChange={(e) => applyPrefs({ ...prefs, vps: { ...prefs.vps, [el]: e.target.value } })}
+                          >
+                            {options.map((opt) => (
+                              <option key={opt.vps} value={opt.vps}>
+                                {opt.vps} ({opt.valence} e⁻)
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            aria-label={`${el} VPS`}
+                            placeholder={`${el}_PBE19`}
+                            value={s.vps}
+                            onChange={(e) => setSpecies(el, { vps: e.target.value.trim() })}
+                          />
+                        )}
                       </td>
                       <td>
                         <input
@@ -184,9 +267,9 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
               </tbody>
             </table>
             <p className="muted small">
-              Valence electrons are the <span className="mono">valence.electron</span> value in the .vps file, e.g.{" "}
-              <span className="mono">grep valence.electron DFT_DATA19/VPS/{elements[0]}_PBE19.vps</span>. Entries are
-              remembered in this browser.
+              Values follow the recommended PAO table of the OpenMX manual for DFT_DATA19 (H–Bi). For Fe, Co, Ni,
+              Cu and Zn choose the hard (H) or soft (S) pseudopotential. Elements marked <i>manual</i> are not in
+              the table: their entries are remembered in this browser.
             </p>
           </fieldset>
 
@@ -245,7 +328,9 @@ export default function OpenmxExportDialog({ crystal, name, onClose }: Props) {
         {missing.length > 0 ? (
           <span className="warn small">Fill PAO, VPS and valence for {missing.join(", ")} to download.</span>
         ) : (
-          <span className="muted small">Ready. Check the species names against your DFT_DATA version.</span>
+          <span className="muted small">
+            Ready · {QUALITY_LABELS[prefs.quality]} basis · DFT_DATA19 recommended PAOs
+          </span>
         )}
         <div className="row">
           <button type="button" onClick={copy} disabled={missing.length > 0}>
