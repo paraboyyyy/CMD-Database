@@ -42,7 +42,9 @@ supaya muat di fungsi serverless Vercel. pymatgen hanya dipakai oleh script impo
 3. **Isi data asli** lewat GitHub Actions:
    - Di GitHub: **Settings → Secrets and variables → Actions**, tambahkan `DATABASE_URL`
      (salin dari Neon/Vercel) dan `MP_API_KEY` (dari https://next-gen.materialsproject.org/api).
-   - Buka tab **Actions → Import data → Run workflow**, isi misalnya `Li-Fe-O` atau `elements:Si,O`.
+   - Buka tab **Actions → Import data → Run workflow**, isi misalnya `Li-Fe-O`, `elements:Si,O`, atau
+     `all` dengan max `0` dan *stable only* untuk semua material stabil (muat di Neon gratis 0,5 GB).
+     Import besar disimpan per batch; kalau terputus, jalankan lagi dan yang sudah masuk akan dilewati.
    - Setelah data asli masuk, jalankan workflow yang sama dengan pilihan `remove_demo_samples`, dan
      tambahkan environment variable `CMD_LOAD_DEMO_DATA=false` di Vercel.
 
@@ -91,6 +93,7 @@ pip install mp-api
 export MP_API_KEY=...
 python -m scripts.import_mp --chemsys Li-Fe-O
 python -m scripts.import_mp --elements Si --max 200 --stable-only
+python -m scripts.import_mp --all --stable-only --max 0   # semua material stabil (puluhan ribu)
 
 # Dari folder file CIF/POSCAR (misalnya unduhan COD atau hasil perhitungan lab)
 python -m scripts.import_files path/ke/folder --source cod

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings  # noqa: E402
 from app.db import SessionLocal, init_db  # noqa: E402
-from app.services.ingest import add_material  # noqa: E402
+from app.services.ingest import Ingester  # noqa: E402
 from app.services.structure import StructureParseError, parse_structure  # noqa: E402
 
 PATTERNS = ("*.cif", "*.vasp", "POSCAR*", "CONTCAR*", "*.json")
@@ -37,14 +37,13 @@ def main() -> None:
     init_db()
     ok = failed = 0
     with SessionLocal() as session:
+        ingester = Ingester(session, args.source)
         for path in files:
             try:
                 structure = parse_structure(path.read_text(errors="replace"), path.name)
                 if not isinstance(structure, Structure):
                     raise StructureParseError("not a periodic structure")
-                material = add_material(
-                    session, structure, source=args.source, source_id=str(path.relative_to(args.folder))
-                )
+                material = ingester.upsert(structure, str(path.relative_to(args.folder)))
                 ok += 1
                 print(f"{material.id:10s} {material.formula_pretty:12s} {path}")
             except StructureParseError as exc:

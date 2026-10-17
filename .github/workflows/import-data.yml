@@ -11,10 +11,10 @@ on:
         options: [materials_project, demo_samples, remove_demo_samples]
         default: materials_project
       query:
-        description: "Materials Project: chemical system (Li-Fe-O), elements (elements:Si,O) or IDs (ids:mp-149,mp-22862)"
+        description: "Materials Project: all, chemical system (Li-Fe-O), elements (elements:Si,O) or IDs (ids:mp-149,mp-22862)"
         default: "Si"
       max:
-        description: "Materials Project: maximum number of entries"
+        description: "Materials Project: maximum number of entries (0 = no limit)"
         default: "100"
       stable_only:
         description: "Materials Project: only thermodynamically stable entries"
@@ -24,6 +24,9 @@ on:
 jobs:
   import:
     runs-on: ubuntu-latest
+    timeout-minutes: 340
+    # Never run two imports against the database at once.
+    concurrency: import-data
     defaults:
       run:
         working-directory: backend
@@ -51,6 +54,7 @@ jobs:
           STABLE: ${{ inputs.stable_only }}
         run: |
           case "$QUERY" in
+            all) args=(--all) ;;
             elements:*) args=(--elements "${QUERY#elements:}") ;;
             ids:*) args=(--ids "${QUERY#ids:}") ;;
             *) args=(--chemsys "$QUERY") ;;

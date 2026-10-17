@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from ..db import get_session
 from ..models import Material
@@ -91,7 +91,9 @@ def search_materials(
     order_by = [func.length(col), col] if sort == "id" else [col]
     if order == "desc":
         order_by = [c.desc() for c in order_by]
-    items = session.scalars(stmt.order_by(*order_by).limit(limit).offset(offset)).all()
+    # Result rows only need summary columns; skip the large structure JSON.
+    page = stmt.options(defer(Material.structure), defer(Material.lattice), defer(Material.extra))
+    items = session.scalars(page.order_by(*order_by).limit(limit).offset(offset)).all()
     return MaterialPage(total=total, limit=limit, offset=offset, items=items)
 
 

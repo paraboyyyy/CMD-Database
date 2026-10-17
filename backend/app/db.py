@@ -38,6 +38,10 @@ def init_db() -> None:
     from . import models  # noqa: F401  (registers tables)
 
     Base.metadata.create_all(engine)
+    # create_all skips tables that already exist; add indexes introduced later.
+    for table in Base.metadata.tables.values():
+        for index in table.indexes:
+            index.create(engine, checkfirst=True)
     if settings.load_demo_data:
         load_demo_data()
     _initialized = True

@@ -13,6 +13,7 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 from .formula import formula_key
 
+
 class StructureParseError(ValueError):
     pass
 
@@ -58,13 +59,26 @@ def lattice_summary(lattice: Lattice) -> dict:
     }
 
 
-def summarize(structure: Structure, symprec: float = 0.01) -> dict:
-    """Composition, symmetry and lattice fields shared by the DB model and the parse API."""
-    comp = structure.composition
-    elements = sorted(el.symbol for el in comp.elements)
+def compact_structure_dict(structure: Structure) -> dict:
+    """Structure.as_dict() without per-site properties, redundant labels and lattice
+    parameters (stored in their own column), rounded to 1e-6. Still loads with
+    Structure.from_dict(), and roughly halves the stored size."""
+    d = structure.as_dict()
+    d["lattice"] = {"matrix": [[round(v, 8) for v in row] for row in d["lattice"]["matrix"]], "pbc": d["lattice"]["pbc"]}
+    d.pop("properties", None)
+    for site in d["sites"]:
+        site.pop("properties", None)
+        if len(site["species"]) == 1 and site.get("label") == site["species"][0]["element"]:
+            site.pop("label")
+        site["abc"] = [round(v, 6) for v in site["abc"]]
+        site["xyz"] = [round(v, 6) for v in site["xyz"]]
+    return d
+
+
+def analyze_symmetry(structure: Structure, symprec: float = 0.01) -> dict:
     try:
         sga = SpacegroupAnalyzer(structure, symprec=symprec)
-        symmetry = {
+        return {
             "spacegroup_symbol": sga.get_space_group_symbol(),
             "spacegroup_number": sga.get_space_group_number(),
             "crystal_system": sga.get_crystal_system(),
@@ -72,12 +86,17 @@ def summarize(structure: Structure, symprec: float = 0.01) -> dict:
         }
     except Exception:
         # Disordered or pathological cells: spglib can fail; store as P1.
-        symmetry = {
-            "spacegroup_symbol": "P1",
-            "spacegroup_number": 1,
-            "crystal_system": "triclinic",
-            "point_group": "1",
-        }
+        return {"spacegroup_symbol": "P1", "spacegroup_number": 1, "crystal_system": "triclinic", "point_group": "1"}
+
+
+def summarize(structure: Structure, symprec: float = 0.01, symmetry: dict | None = None) -> dict:
+    """Composition, symmetry and lattice fields for the materials table. Pass `symmetry`
+    (spacegroup_symbol, spacegroup_number, crystal_system, point_group) to reuse values a
+    source already computed instead of running spglib."""
+    comp = structure.composition
+    elements = sorted(el.symbol for el in comp.elements)
+    if symmetry is None:
+        symmetry = analyze_symmetry(structure, symprec)
     return {
         "formula_pretty": comp.reduced_formula,
         "formula_reduced": comp.reduced_formula,
@@ -92,5 +111,5 @@ def summarize(structure: Structure, symprec: float = 0.01) -> dict:
         "lattice": lattice_summary(structure.lattice),
         "volume": structure.volume,
         "density": float(structure.density),
-        "structure": structure.as_dict(),
+        "structure": compact_structure_dict(structure),
     }

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, Integer, String
+from sqlalchemy import JSON, DateTime, Float, Index, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,6 +12,7 @@ JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 class Material(Base):
     __tablename__ = "materials"
+    __table_args__ = (Index("ix_materials_source_source_id", "source", "source_id"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
 
