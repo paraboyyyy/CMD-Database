@@ -14,14 +14,26 @@ viewer struktur kristal 3D di browser (mirip OpenMX Viewer).
   - Proyeksi perspektif atau ortografik, tampilan sepanjang a/b/c, ekspor PNG
   - Klik atom untuk koordinat fraksional, jarak, sudut, dan dihedral
   - Tombol *Find space group* (dianalisis oleh backend dengan spglib)
-  - **Export input OpenMX (.dat)**: koordinat fraksional (`FRAC`) atau Kartesian (`Ang`), supercell,
-    k-grid otomatis, XC, spin, cutoff, SCF atau optimasi geometri. Basis **Quick / Standard / Precise**
-    terisi otomatis dari tabel PAO rekomendasi manual OpenMX (DFT_DATA19, H–Bi), termasuk pilihan VPS
-    H/S untuk Fe, Co, Ni, Cu, Zn. Unsur di luar tabel diisi manual dan diingat browser.
-    Opsi **DOS/PDOS** (`Dos.fileout`, rentang energi, k-grid), **band structure** (`Band.kpath` otomatis dari
-    seekpath, ditransformasikan ke sel yang diekspor termasuk supercell), **spin collinear/noncollinear**
-    dengan momen magnet awal per unsur, dan **SOC** (`scf.SpinOrbit.Coupling on`).
-    Tersedia juga di halaman detail material.
+  - **Export input OpenMX 4.0 (.dat)**: koordinat fraksional (`FRAC`) atau Kartesian (`Ang`), supercell,
+    basis **Quick / Standard / Precise** dari tabel PAO rekomendasi manual OpenMX (DFT_DATA19, H–Bi, termasuk
+    VPS H/S untuk Fe, Co, Ni, Cu, Zn). Semua keyword diverifikasi terhadap manual OpenMX Ver. 4.0 dan diberi
+    nomor bab di file. Tersedia **resep cepat** (Band + DOS, magnetik, SOC, MAE, DFT+U, vdW, optik, MD, STM,
+    Wannier, Berry/jx/Chern/Z2, E vs a) dan lima tab pengaturan:
+    - *Jenis kalkulasi*: SCF, relaksasi atom (RF/BFGS/EF/DIIS/SD, atom tetap `MD.Fixed.XYZ`), relaksasi sel
+      (RFC5–7, OptC1–7, tekanan, `MD.Fixed.Cell.Vectors`), MD (NVE, NVT velocity scaling/Nosé-Hoover/multi-bath,
+      NPT Parrinello-Rahman/Wentzcovitch, massa atom), kurva energi vs konstanta kisi (`EvsLC`)
+    - *Elektronik*: XC, spin off/collinear/noncollinear (momen awal dan sudut θ, φ per unsur), SOC + faktor
+      `scf.SO.factor`, DFT+U (Dudarev/umum, U dan J per orbital, double counting, polarisasi orbital, Yukawa),
+      constraint arah spin, medan Zeeman spin/orbital, spin spiral, DFT-D2/D3, muatan, medan listrik, ESM,
+      core hole XPS
+    - *SCF*: cutoff, k-grid, suhu elektron, solver (Band, Cluster, DC, DC-LNO, Krylov, ON2), mixing, restart
+      (`on`, `pp` untuk post-processing, `c2n` untuk MAE)
+    - *Output*: band (`Band.kpath` otomatis dari seekpath), DOS/PDOS (tetrahedron atau Gaussian), unfolding
+      supercell (peta atom otomatis), permukaan Fermi, COHP/COOP, optik (CDDF), HOMO/LUMO, STM, CWF dan MLWF
+      (+ Wannier90), Voronoi, dekomposisi energi, NBO, `HS.fileout`, elektroda NEGF
+    - Peringatan otomatis untuk kombinasi yang tidak didukung manual (mis. relaksasi sel + NC, Zeeman +
+      constraint, spin spiral + SOC), dan pratinjau file langsung.
+    Tersedia di viewer, halaman detail material, dan Builder.
   - Tema terang dan gelap otomatis
 - **Builder** (`/builder`): buat material sendiri. Pilih space group (230, termasuk setting/origin choice),
   parameter kisi (otomatis dikunci sesuai sistem kristal), dan posisi atom yang tidak ekuivalen; atom

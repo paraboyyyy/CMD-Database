@@ -1346,3 +1346,224 @@ tbody tr:hover {
 .species-table td.moment {
   width: 4.5rem;
 }
+
+/* ---------- OpenMX calculation picker */
+
+.export-dialog .hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+.export-dialog .kw {
+  font-size: 0.76rem;
+  padding: 0 0.2rem;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.recipes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.recipes__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.recipes__list button {
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+.recipes__list button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.omx-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: -1rem;
+  z-index: 1;
+  margin: 0 -1.25rem;
+  padding: 0.4rem 1.25rem 0;
+  background: var(--surface);
+}
+.omx-tabs button {
+  position: relative;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  box-shadow: none;
+}
+.omx-tabs button[aria-selected="true"] {
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.omx-tabs .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-left: 0.3rem;
+  border-radius: 50%;
+  background: var(--danger);
+  vertical-align: middle;
+}
+.task-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+.task {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  white-space: normal;
+  height: auto;
+}
+.task span {
+  font-size: 0.76rem;
+  color: var(--muted);
+  font-weight: 400;
+  line-height: 1.35;
+}
+.task[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+.option.is-on {
+  border-color: var(--border);
+  background: color-mix(in oklab, var(--surface-2) 60%, transparent);
+}
+.option > .hint {
+  margin-left: 1.6rem;
+}
+.option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.3rem 0 0.1rem 1.6rem;
+}
+.export-dialog .field small.hint {
+  font-size: 0.74rem;
+}
+.export-dialog textarea {
+  width: 100%;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+.row.quad {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+.row.quad input {
+  min-width: 0;
+  width: 100%;
+}
+.mass-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+}
+.mass-list label,
+.orb-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.mass-list input {
+  width: 5.5rem;
+}
+.orb-pick i,
+.mass-list i {
+  font-style: normal;
+  font-weight: 600;
+}
+.cell-flags {
+  width: auto;
+  font-size: 0.85rem;
+}
+.cell-flags th,
+.cell-flags td {
+  border: none;
+  padding: 0.1rem 0.6rem 0.1rem 0;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.link-button {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+  box-shadow: none;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+.export-dialog__preview {
+  display: flex;
+  flex-direction: column;
+}
+.export-dialog__preview pre {
+  flex: 1;
+}
+.omx-summary {
+  position: sticky;
+  top: 0;
+  padding: 0.7rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.omx-summary__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.omx-summary .chip {
+  font-size: 0.74rem;
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.omx-warnings {
+  margin: 0;
+  padding: 0.45rem 0.7rem 0.45rem 1.6rem;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+@media (max-width: 860px) {
+  .task-list {
+    grid-template-columns: 1fr;
+  }
+  .omx-tabs {
+    top: 0;
+  }
+}

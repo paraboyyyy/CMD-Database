@@ -1,7 +1,17 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { autoKgrid, defaultOptions, missingSpecies, segmentPoints, spinKeyword, writeOpenmxDat } from "./openmx";
+import {
+  autoKgrid,
+  defaultOptions,
+  missingSpecies,
+  openmxWarnings,
+  paoOrbitals,
+  parseAtomList,
+  segmentPoints,
+  spinKeyword,
+  writeOpenmxDat,
+} from "./openmx";
 import { parseStructureFile } from "./parsers";
 import { type Mat3, type Vec3, cartToFrac, fracToCart, norm, sub } from "./structure";
 
@@ -17,7 +27,7 @@ const species = {
 
 /** Pull a <Block ... Block> out of the file as rows of tokens. */
 function block(dat: string, name: string): string[][] {
-  const m = dat.match(new RegExp(`<${name}\\n([\\s\\S]*?)\\n${name}>`));
+  const m = dat.match(new RegExp(`<${name}(?:\\s+#[^\\n]*)?\\n([\\s\\S]*?)\\n${name}>`));
   if (!m) throw new Error(`missing block ${name}`);
   return m[1].trim().split("\n").map((l) => l.trim().split(/\s+/));
 }
@@ -71,7 +81,7 @@ describe("OpenMX .dat writer", () => {
 
   it("builds supercells with a scaled cell and k-grid", () => {
     const opts = { ...defaultOptions(nacl, "NaCl"), species, repeat: [2, 1, 1] as Vec3 };
-    opts.kgrid = autoKgrid(nacl.lattice!, opts.repeat);
+    opts.scf = { ...opts.scf, kgrid: autoKgrid(nacl.lattice!, opts.repeat) };
     const dat = writeOpenmxDat(nacl, opts);
     expect(keyword(dat, "Atoms.Number")).toBe("16");
     expect(Number(block(dat, "Atoms.UnitVectors")[0][0])).toBeCloseTo(11.28, 6);
@@ -140,7 +150,7 @@ describe("DOS, band structure, spin and SOC", () => {
   });
 
   it("writes DOS settings", () => {
-    const dat = writeOpenmxDat(nacl, { ...base, dos: { enabled: true, emin: -12, emax: 8, kgrid: [9, 9, 9] } });
+    const dat = writeOpenmxDat(nacl, { ...base, dos: { ...base.dos, enabled: true, emin: -12, emax: 8, kgrid: [9, 9, 9] } });
     expect(keyword(dat, "Dos.fileout")).toBe("on");
     expect(keyword(dat, "Dos.Erange")).toBe("-12.0 8.0");
     expect(keyword(dat, "Dos.Kgrid")).toBe("9 9 9");
@@ -169,5 +179,183 @@ describe("DOS, band structure, spin and SOC", () => {
     expect(row).toHaveLength(13);
     expect(row.slice(7)).toEqual(["0.0", "0.0", "0.0", "0.0", "0", "off"]);
     expect(writeOpenmxDat(nacl, base)).not.toContain("SpinOrbit");
+  });
+});
+
+describe("calculation types", () => {
+  const nacl = load("NaCl_rocksalt.cif");
+  const base = { ...defaultOptions(nacl, "NaCl"), species };
+  const fe = { ...nacl, atoms: nacl.atoms.map((a) => ({ ...a, element: a.element === "Na" ? "Fe" : "O" })) };
+  const feSpecies = {
+    Fe: { pao: "Fe5.5H-s3p2d1", vps: "Fe_PBE19H", valence: 16 },
+    O: { pao: "O6.0-s2p2d1", vps: "O_PBE19", valence: 6 },
+  };
+  const feBase = { ...defaultOptions(fe, "FeO"), species: feSpecies };
+
+  it("parses helpers", () => {
+    expect(paoOrbitals("Ni6.0S-s2p2d2f1")).toEqual(["1s", "2s", "1p", "2p", "1d", "2d", "1f"]);
+    expect(paoOrbitals("manual")).toEqual([]);
+    expect(parseAtomList("1-3, 7 2 99", 8)).toEqual([1, 2, 3, 7]);
+  });
+
+  it("writes geometry optimisation with fixed atoms", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, task: "opt", opt: { ...base.opt, method: "BFGS", fixed: "1-2" } });
+    expect(keyword(dat, "MD.Type")).toBe("BFGS");
+    const fixed = block(dat, "MD.Fixed.XYZ");
+    expect(fixed).toHaveLength(8);
+    expect(fixed[0]).toEqual(["1", "1", "1", "1"]);
+    expect(fixed[2]).toEqual(["3", "0", "0", "0"]);
+  });
+
+  it("writes variable-cell optimisation under pressure", () => {
+    const fixedCell = Array(9).fill(false);
+    fixedCell[2] = true;
+    const dat = writeOpenmxDat(nacl, { ...base, task: "cellopt", cell: { ...base.cell, pressure: 10, fixed: fixedCell } });
+    expect(keyword(dat, "MD.Type")).toBe("RFC5");
+    expect(keyword(dat, "scf.stress.tensor")).toBe("on");
+    expect(keyword(dat, "MD.applied.pressure")).toBe("10");
+    expect(block(dat, "MD.Fixed.Cell.Vectors")).toEqual([["0", "0", "1"], ["0", "0", "0"], ["0", "0", "0"]]);
+  });
+
+  it("writes MD ensembles", () => {
+    const nh = writeOpenmxDat(nacl, { ...base, task: "md" });
+    expect(keyword(nh, "MD.Type")).toBe("NVT_NH");
+    expect(block(nh, "MD.TempControl")).toEqual([["2"], ["1", "300"], ["1000", "300"]]);
+    expect(keyword(nh, "NH.Mass.HeatBath")).toBe("20");
+    const vs = writeOpenmxDat(nacl, { ...base, task: "md", md: { ...base.md, ensemble: "NVT_VS", temperature: 1000 } });
+    expect(block(vs, "MD.TempControl")).toEqual([["1"], ["1000", "10", "1000", "0.5"]]);
+    const npt = writeOpenmxDat(nacl, { ...base, task: "md", md: { ...base.md, ensemble: "NPT_VS_PR", pressure: 10, fixed: "1" } });
+    expect(block(npt, "MD.CellPressureControl")).toEqual([["1"], ["1000", "10"]]);
+    expect(npt).not.toContain("MD.Fixed.XYZ");
+    const vs4 = writeOpenmxDat(nacl, { ...base, task: "md", md: { ...base.md, ensemble: "NVT_VS4" } });
+    expect(keyword(vs4, "MD.num.AtomGroup")).toBe("2");
+    expect(new Set(block(vs4, "MD.AtomGroup").map((r) => r[1]))).toEqual(new Set(["1", "2"]));
+  });
+
+  it("writes E vs lattice constant", () => {
+    const dat = writeOpenmxDat(nacl, { ...base, task: "evslc" });
+    expect(keyword(dat, "MD.Type")).toBe("EvsLC");
+    expect(keyword(dat, "MD.EvsLC.flag")).toBe("1 1 1");
+  });
+
+  it("writes DFT+U values for every PAO orbital", () => {
+    const dat = writeOpenmxDat(fe, {
+      ...feBase,
+      dftU: { ...feBase.dftU, enabled: true, type: 2, values: { Fe: { orbital: "1d", U: 5, J: 0.9 } } },
+    });
+    expect(keyword(dat, "scf.SpinPolarization")).toBe("on"); // DFT+U forces spin polarization
+    expect(keyword(dat, "scf.DFTU.Type")).toBe("2");
+    expect(block(dat, "Hubbard.U.values")).toEqual([
+      ["Fe", "1s", "0.0", "2s", "0.0", "3s", "0.0", "1p", "0.0", "2p", "0.0", "1d", "5.0"],
+      ["O", "1s", "0.0", "2s", "0.0", "1p", "0.0", "2p", "0.0", "1d", "0.0"],
+    ]);
+    expect(block(dat, "Hund.J.values")[0]).toContain("0.9");
+  });
+
+  it("writes constraint, Zeeman and spin spiral switches in noncollinear lines", () => {
+    const dat = writeOpenmxDat(fe, {
+      ...feBase,
+      moments: { Fe: 3 },
+      angles: { Fe: [90, 45] },
+      constraint: { mode: "on", strength: 0.5 },
+      spiral: { enabled: true, q: [0, 0, 0.2] },
+    });
+    expect(keyword(dat, "scf.SpinPolarization")).toBe("NC");
+    expect(keyword(dat, "scf.Constraint.NC.Spin")).toBe("on");
+    expect(keyword(dat, "Spin.Spiral.Vector")).toBe("0 0 0.2");
+    const row = block(dat, "Atoms.SpeciesAndCoordinates").find((r) => r[1] === "Fe")!;
+    expect(row.slice(5)).toEqual(["9.50", "6.50", "90.0", "45.0", "90.0", "45.0", "1", "off"]);
+    expect(openmxWarnings(fe, { ...feBase, spin: "off", constraint: { mode: "on", strength: 1 } }).join(" ")).toMatch(/NC/);
+  });
+
+  it("writes outputs that ride on the DOS step", () => {
+    const dat = writeOpenmxDat(nacl, {
+      ...base,
+      dos: { ...base.dos, enabled: true, method: "gaussian" },
+      cohp: { enabled: true, pairs: "1 5 0 0 0\nbad line" },
+      fermiSurface: true,
+    });
+    expect(keyword(dat, "Dos.fileout")).toBe("on"); // COHP needs the tetrahedron DOS
+    expect(dat).not.toContain("DosGauss");
+    expect(block(dat, "COHP.pairs")).toEqual([["1", "1", "5", "0", "0", "0"]]);
+    expect(keyword(dat, "FermiSurfer.fileout")).toBe("on");
+    const gauss = writeOpenmxDat(nacl, { ...base, dos: { ...base.dos, enabled: true, method: "gaussian" } });
+    expect(keyword(gauss, "Dos.fileout")).toBe("off");
+    expect(keyword(gauss, "DosGauss.fileout")).toBe("on");
+  });
+
+  it("maps supercell atoms for band unfolding", () => {
+    const path = {
+      bravais_lattice: "cF2",
+      spacegroup: "Fm-3m",
+      points: { G: [0, 0, 0] as Vec3, X: [0, 1, 0] as Vec3 },
+      segments: [{ from: "G", to: "X", length: 1 }],
+    };
+    const dat = writeOpenmxDat(nacl, {
+      ...base,
+      repeat: [2, 1, 1],
+      band: { enabled: true, path, density: 10 },
+      unfolding: { enabled: true, lower: -5, upper: 5, nk: 50 },
+    });
+    expect(keyword(dat, "Unfolding.Nkpoint")).toBe("2");
+    expect(block(dat, "Unfolding.kpoint")[1]).toEqual(["X", "0.000000", "1.000000", "0.000000"]);
+    const map = block(dat, "Unfolding.Map");
+    expect(map).toHaveLength(16);
+    expect(map[0]).toEqual(["1", "1"]);
+    expect(map[1]).toEqual(["2", "1"]); // the copy of atom 1 in the second cell
+    expect(Number(block(dat, "Unfolding.ReferenceVectors")[0][0])).toBeCloseTo(5.64, 6);
+  });
+
+  it("writes Wannier functions", () => {
+    const cwf = writeOpenmxDat(nacl, { ...base, cwf: { ...base.cwf, enabled: true, orbitals: { Na: ["s"], Cl: ["s", "p"] } } });
+    expect(block(cwf, "CWF.Guiding.AOs")).toEqual([
+      ["Na", "1s", "1", "2s", "0", "3s", "0", "1p", "0", "2p", "0", "1d", "0"],
+      ["Cl", "1s", "1", "2s", "0", "1p", "1", "2p", "0", "1d", "0", "1f", "0"],
+    ]);
+    const mlwf = writeOpenmxDat(nacl, { ...base, mlwf: { ...base.mlwf, enabled: true, projectors: { Cl: "p" } } });
+    expect(keyword(mlwf, "Species.Number")).toBe("3");
+    expect(block(mlwf, "Definition.of.Atomic.Species")[2]).toEqual(["projCl", "Cl7.0-s1p1d1f1", "Cl_PBE19"]);
+    expect(keyword(mlwf, "Wannier.Func.Num")).toBe("12"); // 4 Cl atoms × 3 p orbitals
+    expect(block(mlwf, "Wannier.Initial.Projectors")).toHaveLength(4);
+  });
+
+  it("writes the remaining switches", () => {
+    const dat = writeOpenmxDat(nacl, {
+      ...base,
+      soc: true,
+      socScale: 0.5,
+      charge: 1,
+      efield: [0, 0, 1],
+      vdw: { mode: "D3", damp: "bj" },
+      esm: { mode: "on4", direction: "z", buffer: 4.5, potentialDiff: 1 },
+      coreHole: { enabled: true, atom: 1, l: "s", index: 1, coulombCutoff: true },
+      optical: { ...base.optical, enabled: true },
+      mo: { enabled: true, homos: 1, lumos: 1 },
+      partialCharge: { enabled: true, window: -0.5 },
+      analysis: { voronoi: true, energyDecomposition: true, nbo: false, hs: true, negfLead: true },
+      scf: { ...base.scf, restart: "c2n", restartFile: "NaCl" },
+    });
+    for (const [key, value] of [
+      ["scf.system.charge", "1"],
+      ["scf.Electric.Field", "0 0 1"],
+      ["version.dftD", "3"],
+      ["DFTD3.damp", "bj"],
+      ["ESM.switch", "on4"],
+      ["ESM.potential.diff", "1"],
+      ["scf.core.hole", "on"],
+      ["CDDF.start", "on"],
+      ["MO.fileout", "on"],
+      ["partial.charge.energy.window", "-0.5"],
+      ["Voronoi.charge", "on"],
+      ["Energy.Decomposition", "on"],
+      ["HS.fileout", "on"],
+      ["NEGF.output_hks", "on"],
+      ["scf.restart", "c2n"],
+      ["scf.restart.filename", "NaCl"],
+      ["scf.Restart.Spin.Angle.Theta", "90"],
+    ])
+      expect(keyword(dat, key), key).toBe(value);
+    expect(block(dat, "core.hole.state")).toEqual([["1", "s", "1"]]);
+    expect(block(dat, "scf.SO.factor")[0]).toEqual(["Na", "s", "0.5", "p", "0.5", "d", "0.5", "f", "0.5"]);
   });
 });
