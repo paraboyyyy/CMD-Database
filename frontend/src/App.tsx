@@ -13,9 +13,9 @@ export default function App() {
   return (
     <>
       <header className="topbar">
-        <Link to="/" className="brand" aria-label="CMD Database home">
+        <Link to="/" className="brand" aria-label="CMD Labs home">
           <img src="/favicon.svg" alt="" width={24} height={24} />
-          <span className="brand-name">CMD Database</span>
+          <span className="brand-name">CMD Labs</span>
         </Link>
         <nav>
           <NavLink to="/" end>

@@ -62,7 +62,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(BASE + path, init);
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
-    throw new ApiError("Cannot reach the CMD Database API. Is the backend running?", 0);
+    throw new ApiError("Cannot reach the CMD Labs API. Is the backend running?", 0);
   }
   if (!res.ok) {
     let detail = res.statusText;

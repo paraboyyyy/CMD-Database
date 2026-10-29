@@ -1,4 +1,4 @@
-# CMD Database
+# CMD Labs
 
 Database material berbasis web (mirip [Materials Project](https://next-gen.materialsproject.org)) dengan
 viewer struktur kristal 3D di browser (mirip OpenMX Viewer).

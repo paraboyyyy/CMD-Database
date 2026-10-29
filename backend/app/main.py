@@ -15,7 +15,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="CMD Database API",
+    title="CMD Labs API",
     description="Search crystal structures and material properties; analyze crystal symmetry.",
     version="0.1.0",
     lifespan=lifespan,

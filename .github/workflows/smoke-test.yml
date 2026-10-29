@@ -45,7 +45,7 @@ jobs:
           check /api/spacegroups                        200 '"Fm-3m"'
           check /builder                                200 'id="root"'
           check /api/materials/does-not-exist           404 'not found'
-          check /openapi.json                           200 'CMD Database API'
+          check /openapi.json                           200 'CMD Labs API'
           check /docs                                   200 'swagger'
           exit $fail
       - name: Database contents
