@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { type MaterialPage, searchMaterials } from "../api";
 import { Formula, SpaceGroup } from "../components/Formula";
 import PeriodicTable from "../components/PeriodicTable";
+import { elementQuery, parseElementQuery } from "../lib/searchQuery";
 
 const CRYSTAL_SYSTEMS = ["cubic", "hexagonal", "trigonal", "tetragonal", "orthorhombic", "monoclinic", "triclinic"];
 const PAGE_SIZE = 25;
@@ -30,6 +31,12 @@ export default function SearchPage() {
     setParams(next);
   };
 
+  // The search box mirrors the active search: the text query, or the elements picked on the table.
+  useEffect(() => {
+    const els = (params.get("elements") ?? "").split(",").filter(Boolean);
+    setQuery(params.get("q") ?? elementQuery(els, params.get("mode") === "only"));
+  }, [params]);
+
   useEffect(() => {
     const els = (params.get("elements") ?? "").split(",").filter(Boolean);
     const only = params.get("mode") === "only";
@@ -54,13 +61,20 @@ export default function SearchPage() {
       .finally(() => setLoading(false));
   }, [params]);
 
+  /** Element lists select elements on the periodic table; anything else is a text search. */
+  const search = (text: string) => {
+    const parsed = parseElementQuery(text);
+    if (parsed) update({ q: null, elements: parsed.elements.join(","), mode: parsed.only ? "only" : null });
+    else update({ q: text.trim(), elements: null, mode: null });
+  };
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    update({ q: query.trim() });
+    search(query);
   };
 
   const setElements = (include: string[], exclude: string[]) =>
-    update({ elements: include.join(","), exclude: exclude.join(",") });
+    update({ q: null, elements: include.join(","), exclude: exclude.join(",") });
 
   const sortBy = (key: string) => {
     const same = (params.get("sort") ?? "id") === key;
@@ -97,10 +111,7 @@ export default function SearchPage() {
               key={ex}
               type="button"
               className="link"
-              onClick={() => {
-                setQuery(ex);
-                update({ q: ex });
-              }}
+              onClick={() => search(ex)}
             >
               {ex}
             </button>
