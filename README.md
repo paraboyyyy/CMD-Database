@@ -41,9 +41,6 @@ viewer struktur kristal 3D di browser (mirip OpenMX Viewer).
   CsCl, zinc blende, wurtzite, fluorite, perovskite, rutile, grafit, MoS2), material di database, atau file.
   Substitusi unsur, supercell, vakansi/doping (expand ke P1), deteksi simetri, peringatan atom bertumpuk,
   ekspor CIF/POSCAR/XYZ/OpenMX, dan "My structures" yang tersimpan di browser.
-  - **Edit langsung di 3D**: seret atom dengan kursor (di space group selain P1 semua atom ekuivalen ikut
-    bergerak), drag & drop unsur dari tabel periodik ke ruang kosong (tambah atom) atau ke atom (ganti
-    unsur), mode kuas (klik unsur lalu klik di viewer), pilih + Delete untuk menghapus, snap ke grid 1/n.
 
 ## Arsitektur
 

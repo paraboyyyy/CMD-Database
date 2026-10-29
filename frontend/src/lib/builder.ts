@@ -33,7 +33,7 @@ export interface SpacegroupInfo {
 export interface BuildResult {
   spacegroup: { number: number; symbol: string; choice: string };
   lattice: Crystal["lattice"];
-  atoms: { element: string; frac: Vec3; site: number; rotation?: number[] }[];
+  atoms: { element: string; frac: Vec3; site: number }[];
   multiplicities: number[];
   detected: { spacegroup_symbol: string; spacegroup_number: number; crystal_system: string; point_group: string } | null;
   warnings: string[];
@@ -112,60 +112,6 @@ export function supercell(s: BuilderState, n: Vec3): BuilderState {
   const p = s.params;
   return { ...s, params: { ...p, a: round(p.a * n[0], 6), b: round(p.b * n[1], 6), c: round(p.c * n[2], 6) }, sites };
 }
-
-/** Index of the builder site that produced atom `atom` of the built cell. */
-export function siteOfAtom(result: BuildResult | null, atom: number): number {
-  return result ? result.atoms[atom]?.site ?? -1 : atom;
-}
-
-const wrapSnap = (f: Vec3, snap: number): Vec3 =>
-  f.map((x) => {
-    const v = snap > 0 ? Math.round(x * snap) / snap : x;
-    return round(wrap01(v, 1e-9), 8);
-  }) as Vec3;
-
-function invert3(m: number[]): number[] {
-  const [a, b, c, d, e, f, g, h, i] = m;
-  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
-  return [e * i - f * h, c * h - b * i, b * f - c * e, f * g - d * i, a * i - c * g, c * d - a * f, d * h - e * g, b * g - a * h, a * e - b * d].map(
-    (x) => x / det,
-  );
-}
-
-/**
- * Move atom `atom` of the built cell by `delta` (fractional). The move is applied to the site it
- * came from: an image made by rotation R moves its site by R⁻¹·delta, so every
- * symmetry-equivalent atom follows. `snap` > 0 rounds the new site position to multiples of 1/snap.
- */
-export function moveAtom(s: BuilderState, result: BuildResult | null, atom: number, delta: Vec3, snap = 0): BuilderState {
-  const site = siteOfAtom(result, atom);
-  if (site < 0 || !s.sites[site]) return s;
-  const rotation = result?.atoms[atom]?.rotation ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  const inv = invert3(rotation);
-  const d = [0, 1, 2].map((r) => inv[3 * r] * delta[0] + inv[3 * r + 1] * delta[1] + inv[3 * r + 2] * delta[2]);
-  const frac = wrapSnap(s.sites[site].frac.map((x, k) => x + d[k]) as Vec3, snap);
-  return { ...s, sites: s.sites.map((x, j) => (j === site ? { ...x, frac } : x)) };
-}
-
-/** Add a new site at a fractional position (wrapped into the cell). */
-export function addSite(s: BuilderState, element: string, frac: Vec3, snap = 0): BuilderState {
-  return { ...s, sites: [...s.sites, { element, frac: wrapSnap(frac, snap) }] };
-}
-
-/** Change the element of the site behind atom `atom` (all its symmetry images change too). */
-export function setAtomElement(s: BuilderState, result: BuildResult | null, atom: number, element: string): BuilderState {
-  const site = siteOfAtom(result, atom);
-  if (site < 0) return s;
-  return { ...s, sites: s.sites.map((x, j) => (j === site ? { ...x, element } : x)) };
-}
-
-/** Remove the sites behind the given atoms (in P1 each atom is its own site). */
-export function removeAtoms(s: BuilderState, result: BuildResult | null, atoms: number[]): BuilderState {
-  const sites = new Set(atoms.map((a) => siteOfAtom(result, a)));
-  return { ...s, sites: s.sites.filter((_, j) => !sites.has(j)) };
-}
-
-export const removeAtom = (s: BuilderState, result: BuildResult | null, atom: number) => removeAtoms(s, result, [atom]);
 
 export function substitute(s: BuilderState, from: string, to: string): BuilderState {
   return { ...s, sites: s.sites.map((x) => (x.element === from ? { ...x, element: to } : x)) };

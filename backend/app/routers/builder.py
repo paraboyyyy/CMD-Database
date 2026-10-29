@@ -96,28 +96,17 @@ def build(req: BuildRequest) -> dict:
         images = images - np.floor(images)
         images[np.isclose(images, 1.0, atol=1e-8)] = 0.0
         kept: list[np.ndarray] = []
-        kept_ops: list[int] = []
-        for op, img in enumerate(images):
+        for img in images:
             if kept and _periodic_distance(np.array(kept), img, matrix).min() < DUPLICATE_TOL:
                 continue
             kept.append(img)
-            kept_ops.append(op)
-        for img, op in zip(kept, kept_ops):
+        for img in kept:
             if len(positions):
                 near = _periodic_distance(positions, img, matrix)
                 j = int(near.argmin())
                 if near[j] < OVERLAP_TOL:
                     overlaps.append(f"{site.element} (site {index + 1}) is {near[j]:.2f} Å from {atoms[j]['element']}")
-            atoms.append(
-                {
-                    "element": site.element,
-                    "frac": [round(float(x), 8) for x in img],
-                    "site": index,
-                    # Rotation (fractional basis, row-major) that maps the site onto this atom, so
-                    # the editor can turn a drag of any image into a move of the site itself.
-                    "rotation": rotations[op].flatten().astype(int).tolist(),
-                }
-            )
+            atoms.append({"element": site.element, "frac": [round(float(x), 8) for x in img], "site": index})
             positions = np.vstack([positions, img])
         multiplicities.append(len(kept))
         if len(atoms) > MAX_ATOMS:

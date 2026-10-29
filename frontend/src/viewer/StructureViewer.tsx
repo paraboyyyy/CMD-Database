@@ -1,20 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { elementInfo } from "../lib/elements";
 import { onThemeChange } from "../lib/theme";
-import { type Crystal, type DisplayAtom, type Vec3, cartToFrac, formula } from "../lib/structure";
+import { type Crystal, type DisplayAtom, cartToFrac, formula } from "../lib/structure";
 import { type AtomStyle, CrystalScene, DEFAULT_OPTIONS, type SceneColors, type ViewOptions } from "./CrystalScene";
 import { angle, dihedral, distance } from "./measure";
-
-export const ELEMENT_MIME = "application/x-cmd-element";
-
-/** Callbacks that turn the viewer into an editor (used by the builder). Indices are crystal atoms. */
-export interface StructureEditor {
-  onMove: (atom: number, delta: Vec3) => void;
-  onDrop: (element: string, atom: number | null, cart: Vec3) => void;
-  onRemove: (atoms: number[]) => void;
-  /** Element placed by clicking empty space (or applied to a clicked atom). */
-  brush: string | null;
-}
 
 interface Props {
   frames: Crystal[];
@@ -23,7 +12,6 @@ interface Props {
   compact?: boolean;
   /** Keep the camera when `frames` changes (live editing). Remount with a new key to re-frame. */
   preserveView?: boolean;
-  editor?: StructureEditor;
 }
 
 function readColors(): SceneColors {
@@ -35,7 +23,7 @@ function readColors(): SceneColors {
   };
 }
 
-export default function StructureViewer({ frames, name = "structure", compact = false, preserveView = false, editor }: Props) {
+export default function StructureViewer({ frames, name = "structure", compact = false, preserveView = false }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<CrystalScene | null>(null);
   const [options, setOptions] = useState<ViewOptions>(DEFAULT_OPTIONS);
@@ -66,40 +54,6 @@ export default function StructureViewer({ frames, name = "structure", compact = 
       sceneRef.current = null;
     };
   }, []);
-
-  // Keep the latest editor callbacks without re-binding the scene.
-  const editorRef = useRef(editor);
-  editorRef.current = editor;
-  const [dropping, setDropping] = useState(false);
-  useEffect(() => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    scene.editable = !!editor;
-    scene.onAtomDrag = (atom, delta) => editorRef.current?.onMove(atom, delta);
-    scene.onBackgroundClick = (cart) => {
-      const ed = editorRef.current;
-      if (ed?.brush) ed.onDrop(ed.brush, null, cart);
-    };
-    scene.onAtomClick = (atom) => {
-      const ed = editorRef.current;
-      if (ed?.brush) ed.onDrop(ed.brush, atom, [0, 0, 0]);
-    };
-  }, [!!editor]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const dropElement = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDropping(false);
-    const el = e.dataTransfer.getData(ELEMENT_MIME);
-    const scene = sceneRef.current;
-    if (!el || !scene || !editor) return;
-    editor.onDrop(el, scene.pickAtom(e.clientX, e.clientY), scene.pointOnViewPlane(e.clientX, e.clientY));
-  };
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (!editor || !selection.length || (e.key !== "Delete" && e.key !== "Backspace")) return;
-    e.preventDefault();
-    editor.onRemove([...new Set(selection.map((a) => a.index))]);
-    sceneRef.current?.clearSelection();
-  };
 
   // Re-frame the camera for a new file; keep the view while stepping through frames.
   // Parents give each file its own `key`, so frame/playing state resets with it.
@@ -145,19 +99,7 @@ export default function StructureViewer({ frames, name = "structure", compact = 
 
   return (
     <div className={`viewer ${compact ? "viewer--compact" : ""}`}>
-      <div
-        className={`viewer__stage ${editor ? "is-editing" : ""} ${dropping ? "is-drop-target" : ""}`}
-        tabIndex={editor ? 0 : undefined}
-        onKeyDown={onKeyDown}
-        onDragOver={(e) => {
-          if (!editor || !e.dataTransfer.types.includes(ELEMENT_MIME)) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-          setDropping(true);
-        }}
-        onDragLeave={() => setDropping(false)}
-        onDrop={dropElement}
-      >
+      <div className="viewer__stage">
         <div ref={hostRef} className="viewer__canvas" aria-label="3D structure view" />
         {error && <div className="viewer__error">{error}</div>}
         {crystal && (
@@ -170,11 +112,7 @@ export default function StructureViewer({ frames, name = "structure", compact = 
             ))}
           </div>
         )}
-        <div className="viewer__hint">
-          {editor
-            ? `Drag atoms to move · drag empty space to rotate · drop elements here${editor.brush ? ` · click to place ${editor.brush}` : ""} · select + Delete to remove`
-            : "Drag to rotate · right-drag to pan · scroll to zoom · click atoms to measure"}
-        </div>
+        <div className="viewer__hint">Drag to rotate · right-drag to pan · scroll to zoom · click atoms to measure</div>
       </div>
 
       <div className="viewer__panel">

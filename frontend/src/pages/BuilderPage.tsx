@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiError, buildStructure, getMaterial, getSpacegroups } from "../api";
 import { Formula, SpaceGroup } from "../components/Formula";
-import ElementPalette from "../components/ElementPalette";
 import OpenmxExportDialog from "../components/OpenmxExportDialog";
 import {
   type BuildResult,
@@ -12,13 +11,9 @@ import {
   type ParamKey,
   type SpacegroupInfo,
   TEMPLATES,
-  addSite,
   constrainLattice,
-  moveAtom,
   p1Crystal,
-  removeAtoms,
   resultToCrystal,
-  setAtomElement,
   stateFromCrystal,
   stateToP1,
   substitute,
@@ -26,9 +21,9 @@ import {
 } from "../lib/builder";
 import { isElement, normalizeSymbol } from "../lib/elements";
 import { ACCEPTED_FILES, parseStructureFile } from "../lib/parsers";
-import { type Vec3, cartToFrac, formula, fromPymatgen } from "../lib/structure";
+import { type Vec3, formula, fromPymatgen } from "../lib/structure";
 import { downloadText, toCif, toPoscar, toXyz } from "../lib/writers";
-import StructureViewer, { type StructureEditor } from "../viewer/StructureViewer";
+import StructureViewer from "../viewer/StructureViewer";
 
 const DRAFT_KEY = "cmd-builder-draft";
 const SAVED_KEY = "cmd-builder-saved";
@@ -83,8 +78,6 @@ export default function BuilderPage() {
   const [subTo, setSubTo] = useState("");
   const [cells, setCells] = useState<Vec3>([2, 2, 2]);
   const [loadId, setLoadId] = useState("");
-  const [brush, setBrush] = useState<string | null>(null);
-  const [snap, setSnap] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = (next: BuilderState, message?: string) => {
@@ -155,20 +148,6 @@ export default function BuilderPage() {
     return null;
   }, [result, state, invalid.length]);
   const frames = useMemo(() => (crystal ? [crystal] : []), [crystal]);
-
-  // Direct editing in the 3D view. Atom indices refer to the displayed cell, which comes from
-  // `result` (or, offline in P1, straight from the sites).
-  const editor: StructureEditor | undefined = crystal?.lattice
-    ? {
-        brush,
-        onMove: (atom, delta) => setState((s) => moveAtom(s, result, atom, cartToFrac(delta, crystal.lattice!), snap)),
-        onDrop: (element, atom, cart) =>
-          setState((s) =>
-            atom === null ? addSite(s, element, cartToFrac(cart, crystal.lattice!), snap) : setAtomElement(s, result, atom, element),
-          ),
-        onRemove: (atoms) => setState((s) => removeAtoms(s, result, atoms)),
-      }
-    : undefined;
 
   const group = groups?.find((g) => g.number === state.spacegroup);
   const setting = group?.settings.find((s) => s.hall === state.hall);
@@ -457,17 +436,6 @@ export default function BuilderPage() {
                 Build
               </button>
             </div>
-            <div className="tool">
-              <span>Snap when editing</span>
-              <select value={snap} onChange={(e) => setSnap(Number(e.target.value))} aria-label="Snap to grid">
-                <option value={0}>off</option>
-                {[4, 6, 8, 12, 24].map((n) => (
-                  <option key={n} value={n}>
-                    1/{n} of the cell
-                  </option>
-                ))}
-              </select>
-            </div>
             {state.hall !== 1 && (
               <div className="tool">
                 <span>Vacancies / doping</span>
@@ -481,11 +449,8 @@ export default function BuilderPage() {
         </div>
 
         <div className="builder__preview">
-          <section className="card palette-card">
-            <ElementPalette brush={brush} onBrush={setBrush} symmetric={state.hall !== 1} />
-          </section>
           {frames.length ? (
-            <StructureViewer key={session} frames={frames} name={fileBase} compact preserveView editor={editor} />
+            <StructureViewer key={session} frames={frames} name={fileBase} compact preserveView />
           ) : (
             <div className="dropzone">
               <span className="muted">{invalid.length ? `Fix the element symbol in row ${state.sites.indexOf(invalid[0]) + 1}.` : "Add atoms to see the structure."}</span>

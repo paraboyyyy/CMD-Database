@@ -1284,55 +1284,6 @@ tbody tr:hover {
     grid-template-columns: repeat(2, 1fr);
   }
 }
-
-/* ---------- element palette + editing */
-
-.palette-card {
-  padding: 0.7rem 0.9rem;
-}
-.palette__grid {
-  display: grid;
-  grid-template-columns: repeat(18, minmax(0, 1fr));
-  gap: 2px;
-}
-.palette__el {
-  padding: 0;
-  height: 22px;
-  min-width: 0;
-  font-size: 0.66rem;
-  font-weight: 700;
-  border-radius: 3px;
-  border: 1px solid color-mix(in oklab, var(--cat) 40%, var(--border));
-  background: color-mix(in oklab, var(--cat) 14%, var(--surface));
-  cursor: grab;
-  line-height: 1;
-}
-.palette__el:hover {
-  border-color: var(--cat);
-  box-shadow: inset 0 -3px 0 var(--atom);
-}
-.palette__el:active {
-  cursor: grabbing;
-}
-.palette__el.is-on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-.palette__gap {
-  height: 4px;
-}
-.palette__help {
-  margin: 0.5rem 0 0;
-}
-.viewer__stage.is-editing:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.viewer__stage.is-drop-target {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--accent) 45%, transparent);
-}
 .indent {
   margin-left: 1.6rem;
 }
